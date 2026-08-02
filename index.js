@@ -549,7 +549,7 @@ import {
                     <button class="internal-states-icon-btn" id="internal-states-preview-close" title="Close">×</button>
                 </div>
                 <div class="internal-states-settings-subtitle">The assembled state block injected at depth 4, exactly as sent to the model (macros expanded).</div>
-                <textarea class="text_prompt internal-states-preview-text" readonly spellcheck="false" rows="20"></textarea>
+                <textarea class="text_prompt internal-states-preview-text" id="internal-states-preview-text" readonly spellcheck="false" rows="20"></textarea>
                 <div class="internal-states-settings-footer">
                     <button class="internal-states-reset-btn" id="internal-states-preview-copy" title="Copy to clipboard">Copy to clipboard</button>
                 </div>
