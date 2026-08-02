@@ -109,15 +109,19 @@ import {
 
     function applyExtensionPrompts() {
         if (!extension_settings?.internal_states) {
+            console.debug('Internal States: applyExtensionPrompts skipped (settings not ready)', new Error('trace').stack);
             return;
         }
+        const enabled = !!extension_settings.internal_states.enabled;
+        console.debug('Internal States: applyExtensionPrompts(enabled=' + enabled + ')', new Error('trace').stack);
+        const before = Object.keys(extension_prompts).filter(key => key.startsWith('internal_state')).sort().join(',');
         const masterKey = 'internal_states_master';
-        if (!extension_settings.internal_states.enabled) {
+        if (!enabled) {
             delete extension_prompts[masterKey];
             for (const state of getAllStateDefs()) {
                 delete extension_prompts['internal_state_' + state.id];
             }
-            console.log('Internal States: prompts removed (enabled=false)');
+            console.warn('Internal States: prompts removed (enabled=false)', new Error('trace').stack);
             updateStatus();
             return;
         }
@@ -137,8 +141,67 @@ import {
         }
         const registered = Object.keys(extension_prompts).filter(key => key.startsWith('internal_state'));
         const details = registered.map(key => key + '=' + (extension_prompts[key]?.value?.length ?? 'missing'));
+        const after = [...registered].sort().join(',');
+        if (before !== after) {
+            console.debug('Internal States: key set changed by applyExtensionPrompts: [' + before + '] -> [' + after + ']');
+        }
         console.log('Internal States: registered extension prompts [' + details.join(', ') + ']');
         updateStatus();
+    }
+
+    function setupDebugInstrumentation() {
+        window.internalStatesDebug = {
+            snapshot: function () {
+                const keys = Object.keys(extension_prompts)
+                    .filter(key => key.startsWith('internal_state'))
+                    .sort();
+                const data = {
+                    enabled: !!extension_settings?.internal_states?.enabled,
+                    now: Date.now(),
+                    keyCount: keys.length,
+                    keys: keys.map(key => {
+                        const p = extension_prompts[key];
+                        return {
+                            key: key,
+                            valueLen: p?.value?.length ?? 'missing',
+                            position: p?.position,
+                            depth: p?.depth,
+                            role: p?.role,
+                            filterType: typeof p?.filter,
+                        };
+                    }),
+                    master: (function () {
+                        const m = extension_prompts['internal_states_master'];
+                        return m ? { valueLen: m.value?.length, position: m.position, depth: m.depth, role: m.role } : null;
+                    })(),
+                };
+                console.log('Internal States: snapshot ' + JSON.stringify(data));
+                return data;
+            },
+        };
+
+        let lastSignature = null;
+        let lastEnabled = null;
+        const watcher = setInterval(function () {
+            if (!extension_settings?.internal_states) return;
+            const sig = Object.keys(extension_prompts)
+                .filter(key => key.startsWith('internal_state'))
+                .sort()
+                .join(',');
+            const enabled = !!extension_settings.internal_states.enabled;
+            if (sig !== lastSignature || enabled !== lastEnabled) {
+                if (lastSignature !== null) {
+                    console.warn('Internal States: CHANGE detected (enabled=' + lastEnabled + '->' + enabled + ', keys=[' + lastSignature + '] -> [' + sig + '])', new Error('trace').stack);
+                } else {
+                    console.debug('Internal States: watcher initial state (enabled=' + enabled + ', keys=[' + sig + '])');
+                }
+                lastSignature = sig;
+                lastEnabled = enabled;
+            }
+        }, 1000);
+        setTimeout(function () {
+            clearInterval(watcher);
+        }, 60000);
     }
 
     function cleanHiddenStateBlock(element) {
@@ -780,6 +843,7 @@ import {
             console.debug('Internal States: initializing');
 
             initStateSettings();
+            setupDebugInstrumentation();
             applyExtensionPrompts();
             setupDisplayCleanup();
             logAssembledBlock();
