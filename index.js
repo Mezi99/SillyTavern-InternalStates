@@ -614,17 +614,24 @@ import {
         textarea.value = 'Loading...';
         try {
             const block = await assemblePromptBlock();
-            textarea.value = block || '(No Internal States prompts registered. Enable the extension and at least one state.)';
-            console.log('Internal States: preview block length =', textarea.value.length, '| hasInternalStatesBlock =', block.includes('<internal_states>'));
-            if (block && !block.includes('<internal_states>')) {
-                console.warn('Internal States: assembled block is missing the <internal_states> master. Raw registered values:');
+            console.log('Internal States: preview block length =', block.length, '| hasInternalStatesBlock =', block.includes('<internal_states>'));
+            let display = block || '';
+            if (!display.includes('<internal_states>')) {
                 const raw = Object.keys(extension_prompts)
                     .filter(key => key.startsWith('internal_state'))
                     .sort()
                     .map(key => key + ' [' + (extension_prompts[key]?.value?.length ?? 'missing') + ' chars]:\n' + (extension_prompts[key]?.value || '(empty)'))
-                    .join('\n\n') || '(no internal_state keys registered)';
-                console.warn(raw.slice(0, 3000));
+                    .join('\n\n');
+                const other = Object.keys(extension_prompts)
+                    .filter(key => !key.startsWith('internal_state'))
+                    .sort()
+                    .map(key => key + ' [pos=' + extension_prompts[key]?.position + ', depth=' + extension_prompts[key]?.depth + ', role=' + extension_prompts[key]?.role + ', ' + (extension_prompts[key]?.value?.length ?? 'missing') + ' chars]')
+                    .join('\n');
+                display += '\n\n--- RAW INTERNAL STATES (block missing) ---\n\n' + (raw || '(no internal_state keys registered)');
+                display += '\n\n--- ALL OTHER REGISTERED PROMPTS ---\n\n' + (other || '(none)');
+                console.warn('Internal States: assembled block missing <internal_states>; diagnostics appended to preview');
             }
+            textarea.value = display || '(No Internal States prompts registered. Enable the extension and at least one state.)';
         } catch (err) {
             console.error('Internal States: failed to build prompt preview', err);
             let raw = '(none)';
