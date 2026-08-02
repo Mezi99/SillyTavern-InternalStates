@@ -443,3 +443,21 @@
     white-space: pre-wrap;
 }
 
+.internal-states-footer {
+    padding: 8px 12px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+    font-size: 0.72em;
+    opacity: 0.75;
+    font-family: var(--monoFonts, Consolas, monospace);
+    line-height: 1.4;
+    user-select: text;
+}
+
+.internal-states-panel-status {
+    font-size: 0.8em;
+    opacity: 0.8;
+    font-family: var(--monoFonts, Consolas, monospace);
+    padding: 2px 0;
+    user-select: text;
+}
+

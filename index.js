@@ -77,6 +77,36 @@ import {
         return builtIn ? builtIn.prompt || '' : '';
     }
 
+    function getCleanupPrompt(state) {
+        const vars = state.cleanupVars;
+        if (!vars || vars.length === 0) {
+            return '';
+        }
+        return vars.map(name => '{{deletevar::' + name + '}}').join('');
+    }
+
+    function updateStatus() {
+        if (!extension_settings?.internal_states) {
+            return;
+        }
+        const enabled = !!extension_settings.internal_states.enabled;
+        const registered = Object.keys(extension_prompts).filter(key => key.startsWith('internal_state'));
+        const enabledCount = getEnabledStates().length;
+        const totalCount = getAllStateDefs().length;
+        const master = extension_prompts['internal_states_master'];
+        const masterInfo = master ? (master.value?.length ?? 0) + 'c' : 'missing';
+        const text = 'Enabled: ' + (enabled ? 'ON' : 'OFF') + ' · states ' + enabledCount + '/' + totalCount + ' · registered ' + registered.length + ' · master ' + masterInfo;
+
+        const panelStatus = document.getElementById('internal_states_status');
+        if (panelStatus) {
+            panelStatus.textContent = text;
+        }
+        const footer = document.getElementById('internal-states-footer');
+        if (footer) {
+            footer.textContent = text;
+        }
+    }
+
     function applyExtensionPrompts() {
         if (!extension_settings?.internal_states) {
             return;
@@ -88,6 +118,7 @@ import {
                 delete extension_prompts['internal_state_' + state.id];
             }
             console.log('Internal States: prompts removed (enabled=false)');
+            updateStatus();
             return;
         }
         setExtensionPrompt(masterKey, getStatePrompt(MASTER_STATE.id), INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
@@ -96,12 +127,18 @@ import {
             if (extension_settings.internal_states.states[state.id]) {
                 setExtensionPrompt(key, getStatePrompt(state.id), INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
             } else {
-                delete extension_prompts[key];
+                const cleanup = getCleanupPrompt(state);
+                if (cleanup) {
+                    setExtensionPrompt(key, cleanup, INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
+                } else {
+                    delete extension_prompts[key];
+                }
             }
         }
         const registered = Object.keys(extension_prompts).filter(key => key.startsWith('internal_state'));
         const details = registered.map(key => key + '=' + (extension_prompts[key]?.value?.length ?? 'missing'));
         console.log('Internal States: registered extension prompts [' + details.join(', ') + ']');
+        updateStatus();
     }
 
     function cleanHiddenStateBlock(element) {
@@ -228,15 +265,11 @@ import {
                 </div>
             </div>
             <div class="internal-states-body" id="internal-states-body"></div>
+            <div class="internal-states-footer" id="internal-states-footer"></div>
         `;
         document.body.appendChild(win);
 
         document.getElementById('internal-states-close').addEventListener('click', function () {
-            if (extension_settings?.internal_states) {
-                extension_settings.internal_states.enabled = false;
-                syncToggle();
-                saveSettingsDebounced();
-            }
             setWindowVisible(false);
         });
 
@@ -284,6 +317,7 @@ import {
     function showWindow() {
         createWindow();
         setWindowVisible(true);
+        updateStatus();
     }
 
     function hideWindow() {
@@ -780,6 +814,7 @@ import {
 
             syncToggle();
             syncHideBlocksToggle();
+            updateStatus();
             if (extension_settings.internal_states.enabled) {
                 showWindow();
             }

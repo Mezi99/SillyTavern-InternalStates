@@ -5,6 +5,7 @@ export const INTERNAL_STATES = [
         icon: '🐉',
         description: 'Dice, skills, and character-driven simulation of in-world actions.',
         defaultEnabled: true,
+        cleanupVars: ['dndTemplate', 'dndSimCoTHQ1', 'dndSimCoT'],
         prompt: `{{// Internal States. Turn this on if you want to turn your RP into a DnD experience. This is my personal fav Internal State. It ensures all skilled actions- socially and physically- are dictated by dice. This completely eliminates positivity bias. It also allows the LLM to blame outcomes on the dice for things such as harm, violence, sex ect which assists with plot momentum and bypassing guardrails. This can be used with items, skills, inventory to allow for passive boosts to rolls.}}{{trim}}
 
 <internal_dndsim>
@@ -36,6 +37,7 @@ Constraint: Execute outcome seamlessly in narrative prose. Never mention rules, 
         icon: '📅',
         description: 'Tracks each character\'s goals, plans, and shifting priorities.',
         defaultEnabled: false,
+        cleanupVars: ['agendaTrackerCoT'],
         prompt: `{{// Internal States. This automates NPC behavior when they are off-screen (not in the current scene with you). It assigns them a goal, tracks how close they are to finishing it, and dictates what happens when they succeed.}}{{trim}}
 
 <internal_agendatracker>
@@ -78,6 +80,7 @@ Quest Integration:
         icon: '📒',
         description: 'Keeps running notes on the scene, NPCs, locations, and open plot threads.',
         defaultEnabled: true,
+        cleanupVars: ['gmNotebookTemplate', 'gmNotebookCoT', 'gmNotebookCoTGamestate'],
         prompt: `{{// Internal States.  The GM's Notebook acts as a short-term and medium-term memory block. It is saved in a hidden HTML <details> tag at the bottom of the response, so the AI can read its own notes from the previous turn while keeping the player's view completely clean.}}{{trim}}
 
 
@@ -115,6 +118,7 @@ Rules:
         icon: '🗡️',
         description: 'Tracks items, equipment, feats, and earned titles per character.',
         defaultEnabled: false,
+        cleanupVars: ['invTemplate'],
         prompt: `{{// Internal States. Turn this on to work in tandem with DnD sim. It tracks inventory, items, tools, skills, and titles that buff or debuff dice rolls.}}{{trim}}
 
 {{setvar::invTemplate::<details><summary>🎒 INV & SKILLS</summary>- <b>Inv:</b> [items]<br>- <b>Titles/Skills:</b> [traits]<br>- <b>Status:</b> [conditions]<br>- <b>Mods:</b> [+/- applied to roll/DC]</details>}}
@@ -142,6 +146,7 @@ Constraints:
         icon: '🥰',
         description: 'Models bonds, trust, and relationship dynamics between characters.',
         defaultEnabled: true,
+        cleanupVars: ['bondsTemplate', 'bondCoT1', 'bondCoT2'],
         prompt: `{{// Internal States. An autonomous relationship engine that manages trust (BOND), affection (Sparks), and resentment (Grudge) between all characters, including independent relationships between NPCs. Under the hood, characters earn temporary Sparks through positive interactions that periodically convert into permanent BOND levels, while negative slights build Grudges that halve their relationship progress. This social status dynamically alters how characters behave, unlocks specific physical intimacy thresholds, modulates their baseline emotional states (VAD), and directly lowers or raises the difficulty (DC) of your DND task checks depending on how much they trust or dislike the target}}{{trim}}
 
 <internal_bondtracker>
@@ -211,6 +216,7 @@ Constraint: Never state numbers or stats in prose. Show relationship tiers stric
         icon: '🌎',
         description: 'Simulates world state, factions, and consequences beyond the immediate scene.',
         defaultEnabled: false,
+        cleanupVars: ['worldsimRoll', 'worldsimTemplate', 'worldsimCoT'],
         prompt: `{{// Internal States.  Turn on if you want to create random events / activities in your RP to make the world feel more alive.}}{{trim}}
 
 {{setvar::worldsimRoll::{{roll::1d20}}}}{{setvar::worldsimTemplate::<details><summary>🌎 WORLD SIM</summary>- <b>Active Table:</b> [Standard or Duo Table selected]<br>- <b>World Sim Roll:</b> {{getvar::worldsimRoll}}<br>- <b>Event:</b> [Selected Event - Brief description of off-screen shift]</details>}}{{trim}}
@@ -255,6 +261,7 @@ Roll: {{getvar::worldsimRoll}}
         icon: '🔫',
         description: 'Records planted details and promises so they pay off later.',
         defaultEnabled: true,
+        cleanupVars: ['chekhovTemplate', 'chekhovsGunCoT'],
         prompt: `{{// Internal States.  The Chekhov’s Gun Tracker acts as a narrative payoff engine that automatically records minor details, foreshadowed comments, or scheduled appointments as hidden narrative debt "Bullets" in the background. Every turn, loaded Bullets age and have a chance of being randomly fired based on d20 rolls, becoming much easier to fire if relevant characters, locations, or emotional moods are present in the current scene. For the user, this ensures that minor elements mentioned earlier in the chat naturally and logically resurface as major plot points later on, making the story feel incredibly cohesive and deliberate.}}{{trim}}
 
 {{setvar::chekhovTemplate::<details><summary>🔫 CHEKHOV'S GUN</summary><br>- Active: {{getvar::chekhovActive::None}} | Locked: {{getvar::chekhovLocked::None}} | Fired: [fired]<br></details>}}
@@ -297,6 +304,7 @@ Seed5: {{roll::1d20}}
         icon: '🧠',
         description: 'Renders each character\'s private thoughts and unfiltered reactions.',
         defaultEnabled: true,
+        cleanupVars: ['thoughtsTemplate'],
         prompt: `{{// Internal States. Shows what the NPCs are
 Thinking! It's fun- helps with grounding the plot and moving NPC actions forward}}{{trim}}
 
