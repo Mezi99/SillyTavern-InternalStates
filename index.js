@@ -122,8 +122,10 @@
 
     async function init() {
         const context = SillyTavern.getContext();
-        extension_settings = context.extension_settings;
+        extension_settings = context.extension_settings || context.extensionSettings;
         saveSettingsDebounced = context.saveSettingsDebounced;
+
+        console.debug('Internal States: initializing');
 
         extension_settings.internal_states = extension_settings.internal_states || {
             enabled: false,
