@@ -583,21 +583,57 @@ import {
         }
     }
 
+    async function assemblePromptBlock() {
+        const timeout = new Promise(function (_, reject) {
+            setTimeout(function () {
+                reject(new Error('timed out after 3s'));
+            }, 3000);
+        });
+        return await Promise.race([
+            getExtensionPrompt(INJECTION_POSITION, INJECTION_DEPTH, '\n', INJECTION_ROLE, false),
+            timeout,
+        ]);
+    }
+
     async function openPromptPreview() {
-        createPromptPreview();
-        const textarea = document.getElementById('internal-states-preview-text');
-        if (!textarea) return;
-        textarea.value = 'Loading...';
         try {
-            const block = await getExtensionPrompt(INJECTION_POSITION, INJECTION_DEPTH, '\n', INJECTION_ROLE, false);
-            textarea.value = block || '(No Internal States prompts registered. Enable the extension and at least one state.)';
+            createPromptPreview();
         } catch (err) {
-            console.error('Internal States: failed to build prompt preview:', err);
-            textarea.value = 'Error: ' + (err?.message || err);
+            console.error('Internal States: failed to create preview overlay', err);
+            return;
         }
         const overlay = document.getElementById('internal-states-preview-overlay');
-        if (overlay) {
-            overlay.classList.add('is-open');
+        const textarea = document.getElementById('internal-states-preview-text');
+        if (!overlay || !textarea) {
+            console.error('Internal States: preview elements missing', { overlay: !!overlay, textarea: !!textarea });
+            return;
+        }
+        overlay.classList.add('is-open');
+        textarea.value = 'Loading...';
+        try {
+            const block = await assemblePromptBlock();
+            textarea.value = block || '(No Internal States prompts registered. Enable the extension and at least one state.)';
+            console.log('Internal States: preview block length =', textarea.value.length);
+        } catch (err) {
+            console.error('Internal States: failed to build prompt preview', err);
+            let raw = '(none)';
+            try {
+                raw = Object.keys(extension_prompts)
+                    .filter(key => key.startsWith('internal_state'))
+                    .sort()
+                    .map(key => extension_prompts[key]?.value)
+                    .join('\n') || '(none)';
+            } catch { /* ignore */ }
+            textarea.value = 'Preview error: ' + (err?.message || err) + '\n\n--- raw registered values ---\n\n' + raw;
+        }
+    }
+
+    async function logAssembledBlock() {
+        try {
+            const block = await assemblePromptBlock();
+            console.log('Internal States: assembled block (' + block.length + ' chars):\n' + (block.slice(0, 2000) || '(empty)'));
+        } catch (err) {
+            console.error('Internal States: failed to assemble block at startup', err);
         }
     }
 
@@ -694,6 +730,7 @@ import {
             initStateSettings();
             applyExtensionPrompts();
             setupDisplayCleanup();
+            logAssembledBlock();
 
             await loadSettings();
 
