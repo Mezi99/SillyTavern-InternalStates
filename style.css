@@ -332,6 +332,24 @@
     cursor: pointer;
 }
 
+.internal-states-state-always-on {
+    margin-left: auto;
+    font-size: 0.75em;
+    font-weight: bold;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--SmartThemeBodyColor, #fff);
+    opacity: 0.55;
+    background: var(--SmartThemeQuoteBordersColor, rgba(128, 128, 128, 0.35));
+    border-radius: 8px;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
+
+.internal-states-master-details {
+    border-color: rgba(128, 128, 128, 0.35);
+}
+
 .internal-states-state-body {
     padding: 10px 12px;
     border-top: 1px solid var(--SmartThemeBorderColor);

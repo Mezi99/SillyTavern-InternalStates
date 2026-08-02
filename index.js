@@ -1,9 +1,19 @@
-import { INTERNAL_STATES } from './states.js';
+import { INTERNAL_STATES, MASTER_STATE } from './states.js';
+import {
+    setExtensionPrompt,
+    extension_prompts,
+    extension_prompt_types,
+    extension_prompt_roles,
+} from '../../../../script.js';
 
 (function () {
     'use strict';
 
     const MODULE_NAME = 'internal_states';
+    const INJECTION_DEPTH = 4;
+    const INJECTION_POSITION = extension_prompt_types.IN_CHAT;
+    const INJECTION_ROLE = extension_prompt_roles.SYSTEM;
+    const HIDDEN_STATES_REGEX = /<!-- GFX_START -->\s*<internal_states>[\s\S]*?<!-- GFX_END -->|<internal_states>[\s\S]*?<\/internal_states>/gi;
 
     let extension_settings;
     let saveSettingsDebounced;
@@ -54,12 +64,72 @@ import { INTERNAL_STATES } from './states.js';
         if (Object.prototype.hasOwnProperty.call(overrides, id)) {
             return overrides[id] || '';
         }
+        if (id === MASTER_STATE.id) {
+            return MASTER_STATE.prompt || '';
+        }
         const custom = getCustomStates().find(state => state.id === id);
         if (custom) {
             return custom.prompt || '';
         }
         const builtIn = INTERNAL_STATES.find(state => state.id === id);
         return builtIn ? builtIn.prompt || '' : '';
+    }
+
+    function applyExtensionPrompts() {
+        if (!extension_settings?.internal_states) {
+            return;
+        }
+        const masterKey = 'internal_states_master';
+        if (!extension_settings.internal_states.enabled) {
+            delete extension_prompts[masterKey];
+            for (const state of getAllStateDefs()) {
+                delete extension_prompts['internal_state_' + state.id];
+            }
+            return;
+        }
+        setExtensionPrompt(masterKey, getStatePrompt(MASTER_STATE.id), INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
+        for (const state of getAllStateDefs()) {
+            const key = 'internal_state_' + state.id;
+            if (extension_settings.internal_states.states[state.id]) {
+                setExtensionPrompt(key, getStatePrompt(state.id), INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
+            } else {
+                delete extension_prompts[key];
+            }
+        }
+    }
+
+    function cleanHiddenStateBlock(element) {
+        if (!element) return;
+        const html = element.innerHTML;
+        if (!html.includes('GFX_START') && !html.includes('<internal_states>')) {
+            return;
+        }
+        const cleaned = html.replace(HIDDEN_STATES_REGEX, '');
+        if (cleaned !== html) {
+            element.innerHTML = cleaned;
+        }
+    }
+
+    function setupDisplayCleanup() {
+        const chatElement = document.getElementById('chat');
+        if (!chatElement) return;
+
+        const observer = new MutationObserver(function (mutations) {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    const element = node.classList?.contains('mes_text')
+                        ? node
+                        : (node.closest?.('.mes_text') || null);
+                    if (element) {
+                        cleanHiddenStateBlock(element);
+                    }
+                }
+            }
+        });
+
+        observer.observe(chatElement, { childList: true, subtree: true });
+        chatElement.querySelectorAll('.mes_text').forEach(cleanHiddenStateBlock);
     }
 
     function initStateSettings() {
@@ -84,6 +154,7 @@ import { INTERNAL_STATES } from './states.js';
     function setStateEnabled(id, enabled) {
         extension_settings.internal_states.states[id] = enabled;
         saveSettingsDebounced();
+        applyExtensionPrompts();
         renderWindowBody();
     }
 
@@ -321,11 +392,34 @@ import { INTERNAL_STATES } from './states.js';
         settingsWindowCreated = true;
     }
 
+    function renderMasterEntry() {
+        const prompt = getStatePrompt(MASTER_STATE.id);
+        return `
+            <details class="internal-states-state-details internal-states-master-details" data-state-id="${escapeHtml(MASTER_STATE.id)}">
+                <summary>
+                    <span class="internal-states-state-summary-icon">${escapeHtml(MASTER_STATE.icon)}</span>
+                    <span class="internal-states-state-summary-name">${escapeHtml(MASTER_STATE.name)}</span>
+                    <span class="internal-states-state-always-on">Always on</span>
+                </summary>
+                <div class="internal-states-state-body">
+                    <div class="internal-states-state-desc">${escapeHtml(MASTER_STATE.description)}</div>
+                    <div class="internal-states-state-field">
+                        <label>Prompt</label>
+                        <textarea class="text_prompt internal-states-state-prompt" data-field="prompt" data-state-id="${escapeHtml(MASTER_STATE.id)}" rows="5" spellcheck="false">${escapeHtml(prompt)}</textarea>
+                    </div>
+                    <div class="internal-states-state-actions">
+                        <button class="internal-states-action-btn internal-states-reset-btn-small" data-action="reset" data-state-id="${escapeHtml(MASTER_STATE.id)}">Reset</button>
+                    </div>
+                </div>
+            </details>
+        `;
+    }
+
     function renderSettingsWindow() {
         const list = document.getElementById('internal-states-settings-list');
         if (!list) return;
 
-        list.innerHTML = getAllStateDefs().map(state => {
+        list.innerHTML = renderMasterEntry() + getAllStateDefs().map(state => {
             const enabled = !!extension_settings.internal_states.states[state.id];
             const prompt = getStatePrompt(state.id);
             return `
@@ -397,6 +491,7 @@ import { INTERNAL_STATES } from './states.js';
                 } else {
                     extension_settings.internal_states.prompts[id] = this.value;
                     saveSettingsDebounced();
+                    applyExtensionPrompts();
                 }
             });
         });
@@ -441,6 +536,7 @@ import { INTERNAL_STATES } from './states.js';
         extension_settings.internal_states.custom_states.push(state);
         extension_settings.internal_states.states[id] = true;
         saveSettingsDebounced();
+        applyExtensionPrompts();
         renderSettingsWindow();
         renderStatesPopup();
         renderWindowBody();
@@ -455,6 +551,7 @@ import { INTERNAL_STATES } from './states.js';
         if (!state) return;
         state[field] = value;
         saveSettingsDebounced();
+        applyExtensionPrompts();
     }
 
     function deleteCustomState(id) {
@@ -466,6 +563,7 @@ import { INTERNAL_STATES } from './states.js';
         delete extension_settings.internal_states.states[id];
         delete extension_settings.internal_states.prompts[id];
         saveSettingsDebounced();
+        applyExtensionPrompts();
         renderSettingsWindow();
         renderStatesPopup();
         renderWindowBody();
@@ -474,6 +572,7 @@ import { INTERNAL_STATES } from './states.js';
     function resetStatePrompt(id) {
         delete extension_settings.internal_states.prompts[id];
         saveSettingsDebounced();
+        applyExtensionPrompts();
         renderSettingsWindow();
     }
 
@@ -482,6 +581,7 @@ import { INTERNAL_STATES } from './states.js';
         extension_settings.internal_states.states = getDefaultStateMap();
         extension_settings.internal_states.prompts = {};
         saveSettingsDebounced();
+        applyExtensionPrompts();
         renderSettingsWindow();
         renderStatesPopup();
         renderWindowBody();
@@ -507,6 +607,8 @@ import { INTERNAL_STATES } from './states.js';
         console.debug('Internal States: initializing');
 
         initStateSettings();
+        applyExtensionPrompts();
+        setupDisplayCleanup();
 
         await loadSettings();
 
@@ -514,6 +616,7 @@ import { INTERNAL_STATES } from './states.js';
             const enabled = jQuery(this).is(':checked');
             extension_settings.internal_states.enabled = enabled;
             saveSettingsDebounced();
+            applyExtensionPrompts();
             if (enabled) {
                 showWindow();
             } else {
