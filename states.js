@@ -55,11 +55,11 @@ export const INTERNAL_STATES = [
         description: 'Renders each character\'s private thoughts and unfiltered reactions.',
         defaultEnabled: true,
     },
-    {
-        id: 'master',
-        name: 'Internal States (Master)',
-        icon: '👾',
-        description: 'The master block that orchestrates all enabled Internal States modules.',
-        defaultEnabled: true,
-    },
 ];
+
+export const MASTER_STATE = {
+    id: 'format_guide',
+    name: 'Format Guide',
+    icon: '👾',
+    description: 'Always-on wrapper/guide that defines the output structure for the enabled Internal States.',
+};

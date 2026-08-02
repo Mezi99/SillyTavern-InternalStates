@@ -40,6 +40,7 @@ import { INTERNAL_STATES } from './states.js';
                 extension_settings.internal_states.states[id] = enabled;
             }
         }
+        delete extension_settings.internal_states.states.master;
     }
 
     function getEnabledStates() {
