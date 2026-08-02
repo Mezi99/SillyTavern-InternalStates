@@ -63,8 +63,8 @@ import {
 
     function getStatePrompt(id) {
         const overrides = extension_settings.internal_states.prompts;
-        if (Object.prototype.hasOwnProperty.call(overrides, id)) {
-            return overrides[id] || '';
+        if (overrides[id]) {
+            return overrides[id];
         }
         if (id === MASTER_STATE.id) {
             return MASTER_STATE.prompt || '';
@@ -87,6 +87,7 @@ import {
             for (const state of getAllStateDefs()) {
                 delete extension_prompts['internal_state_' + state.id];
             }
+            console.log('Internal States: prompts removed (enabled=false)');
             return;
         }
         setExtensionPrompt(masterKey, getStatePrompt(MASTER_STATE.id), INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
@@ -99,7 +100,8 @@ import {
             }
         }
         const registered = Object.keys(extension_prompts).filter(key => key.startsWith('internal_state'));
-        console.debug('Internal States: registered extension prompts', registered);
+        const details = registered.map(key => key + '=' + (extension_prompts[key]?.value?.length ?? 'missing'));
+        console.log('Internal States: registered extension prompts [' + details.join(', ') + ']');
     }
 
     function cleanHiddenStateBlock(element) {
@@ -613,7 +615,16 @@ import {
         try {
             const block = await assemblePromptBlock();
             textarea.value = block || '(No Internal States prompts registered. Enable the extension and at least one state.)';
-            console.log('Internal States: preview block length =', textarea.value.length);
+            console.log('Internal States: preview block length =', textarea.value.length, '| hasInternalStatesBlock =', block.includes('<internal_states>'));
+            if (block && !block.includes('<internal_states>')) {
+                console.warn('Internal States: assembled block is missing the <internal_states> master. Raw registered values:');
+                const raw = Object.keys(extension_prompts)
+                    .filter(key => key.startsWith('internal_state'))
+                    .sort()
+                    .map(key => key + ' [' + (extension_prompts[key]?.value?.length ?? 'missing') + ' chars]:\n' + (extension_prompts[key]?.value || '(empty)'))
+                    .join('\n\n') || '(no internal_state keys registered)';
+                console.warn(raw.slice(0, 3000));
+            }
         } catch (err) {
             console.error('Internal States: failed to build prompt preview', err);
             let raw = '(none)';
@@ -631,7 +642,7 @@ import {
     async function logAssembledBlock() {
         try {
             const block = await assemblePromptBlock();
-            console.log('Internal States: assembled block (' + block.length + ' chars):\n' + (block.slice(0, 2000) || '(empty)'));
+            console.log('Internal States: assembled block (' + block.length + ' chars, hasInternalStatesBlock=' + block.includes('<internal_states>') + '):\n' + (block.slice(0, 2000) || '(empty)'));
         } catch (err) {
             console.error('Internal States: failed to assemble block at startup', err);
         }
