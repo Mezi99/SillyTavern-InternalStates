@@ -240,3 +240,170 @@
     color: var(--SmartThemeEmColor);
     border-color: var(--SmartThemeEmColor);
 }
+
+.internal-states-settings-wide {
+    width: 640px;
+}
+
+.internal-states-settings-groups {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.internal-states-settings-group {
+    padding: 8px 12px 12px;
+}
+
+.internal-states-settings-group-header {
+    font-weight: 600;
+    font-size: 1em;
+    padding: 6px 2px 2px;
+    margin-bottom: 4px;
+}
+
+.internal-states-settings-group .internal-states-settings-subtitle {
+    padding: 6px 2px 10px;
+    border-bottom: none;
+}
+
+.internal-states-settings-group .internal-states-settings-list {
+    flex: none;
+    overflow: visible;
+    padding: 0 0 8px;
+}
+
+.internal-states-settings-group-footer {
+    padding-top: 4px;
+}
+
+.internal-states-state-details {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    background: rgba(128, 128, 128, 0.04);
+}
+
+.internal-states-state-details > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.92em;
+    user-select: none;
+}
+
+.internal-states-state-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.internal-states-state-details > summary::after {
+    content: '▾';
+    margin-left: 6px;
+    font-size: 0.8em;
+    opacity: 0.5;
+    transition: transform 0.15s ease;
+}
+
+.internal-states-state-details[open] > summary::after {
+    transform: rotate(180deg);
+}
+
+.internal-states-state-summary-icon {
+    flex-shrink: 0;
+}
+
+.internal-states-state-summary-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.internal-states-state-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+}
+
+.internal-states-state-toggle input {
+    margin: 0;
+    cursor: pointer;
+}
+
+.internal-states-state-body {
+    padding: 10px 12px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.internal-states-state-desc {
+    font-size: 0.8em;
+    opacity: 0.65;
+    line-height: 1.35;
+}
+
+.internal-states-state-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.internal-states-state-field label {
+    font-size: 0.75em;
+    opacity: 0.7;
+}
+
+.internal-states-state-icon-input {
+    width: 80px;
+}
+
+.internal-states-state-prompt {
+    font-family: inherit;
+    min-height: 90px;
+    resize: vertical;
+}
+
+.internal-states-state-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.internal-states-action-btn {
+    background: transparent;
+    border: 1px solid var(--SmartThemeBorderColor);
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.8em;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.internal-states-action-btn:hover {
+    color: var(--SmartThemeEmColor);
+    border-color: var(--SmartThemeEmColor);
+}
+
+.internal-states-delete-btn:hover {
+    color: #e5484d;
+    border-color: #e5484d;
+}
+
+.internal-states-add-btn {
+    background: transparent;
+    border: 1px dashed var(--SmartThemeBorderColor);
+    color: var(--SmartThemeBodyColor);
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.internal-states-add-btn:hover {
+    color: var(--SmartThemeEmColor);
+    border-color: var(--SmartThemeEmColor);
+}
