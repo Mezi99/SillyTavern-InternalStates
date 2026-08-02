@@ -1,0 +1,12 @@
+{
+    "display_name": "Internal States",
+    "loading_order": 1000,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Mezi99",
+    "version": "0.1.0",
+    "homePage": "https://github.com/Mezi99/SillyTavern-InternalStates",
+    "auto_update": true
+}
