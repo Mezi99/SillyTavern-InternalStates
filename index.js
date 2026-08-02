@@ -5,6 +5,8 @@ import {
     extension_prompts,
     extension_prompt_types,
     extension_prompt_roles,
+    eventSource,
+    event_types,
 } from '../../../../script.js';
 
 (function () {
@@ -149,6 +151,35 @@ import {
         updateStatus();
     }
 
+    function getExpectedStateKeys() {
+        const keys = ['internal_states_master'];
+        for (const state of getAllStateDefs()) {
+            keys.push('internal_state_' + state.id);
+        }
+        return keys;
+    }
+
+    function ensurePromptsApplied() {
+        if (!extension_settings?.internal_states) {
+            return;
+        }
+        const enabled = !!extension_settings.internal_states.enabled;
+        const actualKeys = Object.keys(extension_prompts).filter(key => key.startsWith('internal_state'));
+        if (enabled) {
+            const missing = getExpectedStateKeys().filter(key => !actualKeys.includes(key));
+            if (missing.length === 0) {
+                return;
+            }
+            console.warn('Internal States: self-heal registering missing prompts [' + missing.join(', ') + ']');
+        } else {
+            if (actualKeys.length === 0) {
+                return;
+            }
+            console.warn('Internal States: self-heal clearing stale prompts (enabled=false)');
+        }
+        applyExtensionPrompts();
+    }
+
     function setupDebugInstrumentation() {
         window.internalStatesDebug = {
             snapshot: function () {
@@ -182,7 +213,7 @@ import {
 
         let lastSignature = null;
         let lastEnabled = null;
-        const watcher = setInterval(function () {
+        setInterval(function () {
             if (!extension_settings?.internal_states) return;
             const sig = Object.keys(extension_prompts)
                 .filter(key => key.startsWith('internal_state'))
@@ -191,17 +222,19 @@ import {
             const enabled = !!extension_settings.internal_states.enabled;
             if (sig !== lastSignature || enabled !== lastEnabled) {
                 if (lastSignature !== null) {
-                    console.warn('Internal States: CHANGE detected (enabled=' + lastEnabled + '->' + enabled + ', keys=[' + lastSignature + '] -> [' + sig + '])', new Error('trace').stack);
+                    console.warn('Internal States: CHANGE detected (enabled=' + lastEnabled + '->' + enabled + ', keys=[' + lastSignature + '] -> [' + sig + '])');
                 } else {
                     console.debug('Internal States: watcher initial state (enabled=' + enabled + ', keys=[' + sig + '])');
                 }
                 lastSignature = sig;
                 lastEnabled = enabled;
             }
+            try {
+                ensurePromptsApplied();
+            } catch (err) {
+                console.error('Internal States: self-heal failed', err);
+            }
         }, 1000);
-        setTimeout(function () {
-            clearInterval(watcher);
-        }, 60000);
     }
 
     function cleanHiddenStateBlock(element) {
@@ -683,6 +716,7 @@ import {
     }
 
     async function assemblePromptBlock() {
+        ensurePromptsApplied();
         const timeout = new Promise(function (_, reject) {
             setTimeout(function () {
                 reject(new Error('timed out after 3s'));
@@ -847,6 +881,9 @@ import {
             applyExtensionPrompts();
             setupDisplayCleanup();
             logAssembledBlock();
+
+            eventSource.on(event_types.CHAT_CHANGED, applyExtensionPrompts);
+            eventSource.on(event_types.GROUP_UPDATED, applyExtensionPrompts);
 
             await loadSettings();
 
