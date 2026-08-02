@@ -13,9 +13,17 @@
             <div class="et-field">
                 <label class="et-toggle-row" for="internal_states_enabled">
                     <input type="checkbox" id="internal_states_enabled" class="checkbox">
-                    <span class="et-label-text">Enable Internal States window</span>
+                    <span class="et-label-text">Enable Internal States</span>
                 </label>
-                <div class="et-hint">Shows the Internal States panel. Module toggles are coming soon.</div>
+                <div class="et-hint">Shows the Internal States panel and injects the enabled state modules into the prompt.</div>
+            </div>
+
+            <div class="et-field">
+                <label class="et-toggle-row" for="internal_states_hide_blocks">
+                    <input type="checkbox" id="internal_states_hide_blocks" class="checkbox">
+                    <span class="et-label-text">Hide state blocks from chat</span>
+                </label>
+                <div class="et-hint">When ON, the AI's internal_states block is hidden from the chat view (it is still sent to the model). When OFF (default), the block is visible, like the original preset.</div>
             </div>
 
         </div>

@@ -1,6 +1,7 @@
 import { INTERNAL_STATES, MASTER_STATE } from './states.js';
 import {
     setExtensionPrompt,
+    getExtensionPrompt,
     extension_prompts,
     extension_prompt_types,
     extension_prompt_roles,
@@ -20,6 +21,7 @@ import {
     let windowCreated = false;
     let statesPopupCreated = false;
     let settingsWindowCreated = false;
+    let promptPreviewCreated = false;
 
     function getBaseUrl() {
         const scripts = document.querySelectorAll('script[src*="index.js"]');
@@ -96,6 +98,8 @@ import {
                 delete extension_prompts[key];
             }
         }
+        const registered = Object.keys(extension_prompts).filter(key => key.startsWith('internal_state'));
+        console.debug('Internal States: registered extension prompts', registered);
     }
 
     function cleanHiddenStateBlock(element) {
@@ -115,6 +119,9 @@ import {
         if (!chatElement) return;
 
         const observer = new MutationObserver(function (mutations) {
+            if (!extension_settings?.internal_states?.hide_state_blocks) {
+                return;
+            }
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType !== Node.ELEMENT_NODE) continue;
@@ -129,12 +136,15 @@ import {
         });
 
         observer.observe(chatElement, { childList: true, subtree: true });
-        chatElement.querySelectorAll('.mes_text').forEach(cleanHiddenStateBlock);
+        if (extension_settings?.internal_states?.hide_state_blocks) {
+            chatElement.querySelectorAll('.mes_text').forEach(cleanHiddenStateBlock);
+        }
     }
 
     function initStateSettings() {
         extension_settings.internal_states = extension_settings.internal_states || {};
-        extension_settings.internal_states.enabled = !!extension_settings.internal_states.enabled;
+        extension_settings.internal_states.enabled = extension_settings.internal_states.enabled ?? true;
+        extension_settings.internal_states.hide_state_blocks = extension_settings.internal_states.hide_state_blocks ?? false;
         extension_settings.internal_states.states = extension_settings.internal_states.states || {};
         extension_settings.internal_states.prompts = extension_settings.internal_states.prompts || {};
         extension_settings.internal_states.custom_states = extension_settings.internal_states.custom_states || [];
@@ -373,6 +383,7 @@ import {
                     </div>
                 </div>
                 <div class="internal-states-settings-footer">
+                    <button class="internal-states-reset-btn" id="internal-states-preview-btn" title="View the assembled state block that gets injected into the prompt">View injected prompt</button>
                     <button class="internal-states-reset-btn" id="internal-states-reset-all-btn" title="Reset built-in toggles and prompts to defaults">Reset all to defaults</button>
                 </div>
             </div>
@@ -388,6 +399,7 @@ import {
         document.getElementById('internal-states-settings-close').addEventListener('click', closeSettingsWindow);
         document.getElementById('internal-states-add-state-btn').addEventListener('click', addCustomState);
         document.getElementById('internal-states-reset-all-btn').addEventListener('click', resetAllDefaults);
+        document.getElementById('internal-states-preview-btn').addEventListener('click', openPromptPreview);
 
         settingsWindowCreated = true;
     }
@@ -524,6 +536,78 @@ import {
         }
     }
 
+    function createPromptPreview() {
+        if (promptPreviewCreated) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'internal-states-preview-overlay';
+        overlay.className = 'internal-states-settings-overlay';
+        overlay.innerHTML = `
+            <div class="internal-states-settings-panel internal-states-preview-panel">
+                <div class="internal-states-settings-header">
+                    <span class="internal-states-settings-title"><i class="fa-solid fa-scroll"></i> Injected prompt</span>
+                    <button class="internal-states-icon-btn" id="internal-states-preview-close" title="Close">×</button>
+                </div>
+                <div class="internal-states-settings-subtitle">The assembled state block injected at depth 4, exactly as sent to the model (macros expanded).</div>
+                <textarea class="text_prompt internal-states-preview-text" readonly spellcheck="false" rows="20"></textarea>
+                <div class="internal-states-settings-footer">
+                    <button class="internal-states-reset-btn" id="internal-states-preview-copy" title="Copy to clipboard">Copy to clipboard</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) {
+                closePromptPreview();
+            }
+        });
+
+        document.getElementById('internal-states-preview-close').addEventListener('click', closePromptPreview);
+        document.getElementById('internal-states-preview-copy').addEventListener('click', function () {
+            const text = document.getElementById('internal-states-preview-text');
+            navigator.clipboard.writeText(text.value).then(function () {
+                console.log('Internal States: prompt copied to clipboard');
+            }).catch(function () {
+                console.error('Internal States: failed to copy prompt');
+            });
+        });
+
+        promptPreviewCreated = true;
+    }
+
+    function closePromptPreview() {
+        const overlay = document.getElementById('internal-states-preview-overlay');
+        if (overlay) {
+            overlay.classList.remove('is-open');
+        }
+    }
+
+    async function openPromptPreview() {
+        createPromptPreview();
+        const textarea = document.getElementById('internal-states-preview-text');
+        if (!textarea) return;
+        textarea.value = 'Loading...';
+        try {
+            const block = await getExtensionPrompt(INJECTION_POSITION, INJECTION_DEPTH, '\n', INJECTION_ROLE, false);
+            textarea.value = block || '(No Internal States prompts registered. Enable the extension and at least one state.)';
+        } catch (err) {
+            console.error('Internal States: failed to build prompt preview:', err);
+            textarea.value = 'Error: ' + (err?.message || err);
+        }
+        const overlay = document.getElementById('internal-states-preview-overlay');
+        if (overlay) {
+            overlay.classList.add('is-open');
+        }
+    }
+
+    function syncHideBlocksToggle() {
+        const toggle = document.getElementById('internal_states_hide_blocks');
+        if (toggle && extension_settings?.internal_states) {
+            toggle.checked = !!extension_settings.internal_states.hide_state_blocks;
+        }
+    }
+
     function addCustomState() {
         const id = 'custom_' + Date.now();
         const state = {
@@ -600,43 +684,55 @@ import {
     }
 
     async function init() {
-        const context = SillyTavern.getContext();
-        extension_settings = context.extension_settings || context.extensionSettings;
-        saveSettingsDebounced = context.saveSettingsDebounced;
+        try {
+            const context = SillyTavern.getContext();
+            extension_settings = context.extension_settings || context.extensionSettings;
+            saveSettingsDebounced = context.saveSettingsDebounced;
 
-        console.debug('Internal States: initializing');
+            console.debug('Internal States: initializing');
 
-        initStateSettings();
-        applyExtensionPrompts();
-        setupDisplayCleanup();
-
-        await loadSettings();
-
-        jQuery('#internal_states_enabled').on('change', function () {
-            const enabled = jQuery(this).is(':checked');
-            extension_settings.internal_states.enabled = enabled;
-            saveSettingsDebounced();
+            initStateSettings();
             applyExtensionPrompts();
-            if (enabled) {
+            setupDisplayCleanup();
+
+            await loadSettings();
+
+            jQuery('#internal_states_enabled').on('change', function () {
+                const enabled = jQuery(this).is(':checked');
+                extension_settings.internal_states.enabled = enabled;
+                saveSettingsDebounced();
+                applyExtensionPrompts();
+                if (enabled) {
+                    showWindow();
+                } else {
+                    hideWindow();
+                }
+            });
+
+            jQuery('#internal_states_hide_blocks').on('change', function () {
+                extension_settings.internal_states.hide_state_blocks = jQuery(this).is(':checked');
+                saveSettingsDebounced();
+                setupDisplayCleanup();
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    closeStatesPopup();
+                    closeSettingsWindow();
+                    closePromptPreview();
+                }
+            });
+
+            syncToggle();
+            syncHideBlocksToggle();
+            if (extension_settings.internal_states.enabled) {
                 showWindow();
-            } else {
-                hideWindow();
             }
-        });
 
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                closeStatesPopup();
-                closeSettingsWindow();
-            }
-        });
-
-        syncToggle();
-        if (extension_settings.internal_states.enabled) {
-            showWindow();
+            console.log('Internal States: loaded (enabled=' + extension_settings.internal_states.enabled + ', states=' + getEnabledStates().map(state => state.id).join(',') + ')');
+        } catch (err) {
+            console.error('Internal States: init failed', err);
         }
-
-        console.log('Internal States extension loaded');
     }
 
     if (window.SillyTavern) {
