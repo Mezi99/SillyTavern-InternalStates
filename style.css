@@ -109,6 +109,28 @@
     white-space: nowrap;
 }
 
+.internal-states-block {
+    max-height: 320px;
+    overflow-y: auto;
+    font-size: 0.85em;
+    line-height: 1.45;
+    padding: 2px;
+    user-select: text;
+}
+
+.internal-states-block details {
+    margin: 0 0 4px;
+}
+
+.internal-states-block details > summary {
+    cursor: pointer;
+    user-select: none;
+}
+
+.internal-states-block > internal_states {
+    display: block;
+}
+
 .internal-states-settings-overlay {
     position: fixed;
     inset: 0;

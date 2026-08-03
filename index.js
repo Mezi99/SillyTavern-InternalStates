@@ -317,6 +317,24 @@ import {
         }
     }
 
+    function getLastStateBlock() {
+        try {
+            const context = SillyTavern.getContext();
+            const chat = context?.chat || [];
+            for (let i = chat.length - 1; i >= 0; i--) {
+                const message = chat[i];
+                if (!message || message.is_user) continue;
+                const match = String(message.mes || '').match(HIDDEN_STATES_REGEX);
+                if (match && match[0]) {
+                    return match[0];
+                }
+            }
+        } catch {
+            // ignore context errors, fall through to placeholder
+        }
+        return null;
+    }
+
     function renderWindowBody() {
         const body = document.getElementById('internal-states-body');
         if (!body) return;
@@ -333,16 +351,26 @@ import {
             return;
         }
 
+        const block = getLastStateBlock();
+
+        if (!block) {
+            body.innerHTML = `
+                <div class="internal-states-placeholder">
+                    <div class="internal-states-placeholder-title">No internal states block yet</div>
+                    <div class="internal-states-placeholder-text">The AI writes the state block at the end of its replies. Send a message to generate one.</div>
+                </div>
+            `;
+            return;
+        }
+
         body.innerHTML = `
-            <div class="internal-states-module-list">
-                ${enabled.map(state => `
-                    <div class="internal-states-module-row">
-                        <span class="internal-states-module-icon">${escapeHtml(state.icon)}</span>
-                        <span class="internal-states-module-name">${escapeHtml(state.name)}</span>
-                    </div>
-                `).join('')}
-            </div>
+            <div class="internal-states-block">${block}</div>
         `;
+    }
+
+    function refreshWindowBody() {
+        if (!windowCreated) return;
+        renderWindowBody();
     }
 
     function createWindow() {
@@ -413,6 +441,7 @@ import {
     function showWindow() {
         createWindow();
         setWindowVisible(true);
+        renderWindowBody();
         updateStatus();
     }
 
@@ -884,6 +913,8 @@ import {
 
             eventSource.on(event_types.CHAT_CHANGED, applyExtensionPrompts);
             eventSource.on(event_types.GROUP_UPDATED, applyExtensionPrompts);
+            eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, refreshWindowBody);
+            eventSource.on(event_types.CHAT_CHANGED, refreshWindowBody);
 
             await loadSettings();
 
