@@ -7,6 +7,8 @@ import {
     extension_prompt_roles,
     eventSource,
     event_types,
+    chat_metadata,
+    saveChatDebounced,
 } from '../../../../script.js';
 
 (function () {
@@ -24,6 +26,7 @@ import {
     let statesPopupCreated = false;
     let settingsWindowCreated = false;
     let promptPreviewCreated = false;
+    let lastParseInfo = { time: null, status: 'none' };
 
     function getBaseUrl() {
         const scripts = document.querySelectorAll('script[src*="index.js"]');
@@ -109,6 +112,22 @@ import {
         }
     }
 
+    function getState() {
+        if (!chat_metadata.internalStates || typeof chat_metadata.internalStates !== 'object' || Array.isArray(chat_metadata.internalStates)) {
+            chat_metadata.internalStates = { version: 1, modules: {}, world: {} };
+        }
+        return chat_metadata.internalStates;
+    }
+
+    function getMasterPrompt() {
+        const base = getStatePrompt(MASTER_STATE.id);
+        let stateText = '{}';
+        try {
+            stateText = JSON.stringify(getState());
+        } catch { /* fall back to empty object */ }
+        return base + '\n\nCURRENT INTERNAL STATE JSON (persisted state from last turn):\n' + stateText;
+    }
+
     function applyExtensionPrompts() {
         if (!extension_settings?.internal_states) {
             console.debug('Internal States: applyExtensionPrompts skipped (settings not ready)', new Error('trace').stack);
@@ -127,7 +146,7 @@ import {
             updateStatus();
             return;
         }
-        setExtensionPrompt(masterKey, getStatePrompt(MASTER_STATE.id), INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
+        setExtensionPrompt(masterKey, getMasterPrompt(), INJECTION_POSITION, INJECTION_DEPTH, false, INJECTION_ROLE);
         for (const state of getAllStateDefs()) {
             const key = 'internal_state_' + state.id;
             if (extension_settings.internal_states.states[state.id]) {
@@ -279,7 +298,7 @@ import {
     function initStateSettings() {
         extension_settings.internal_states = extension_settings.internal_states || {};
         extension_settings.internal_states.enabled = extension_settings.internal_states.enabled ?? true;
-        extension_settings.internal_states.hide_state_blocks = extension_settings.internal_states.hide_state_blocks ?? false;
+        extension_settings.internal_states.hide_state_blocks = extension_settings.internal_states.hide_state_blocks ?? true;
         extension_settings.internal_states.states = extension_settings.internal_states.states || {};
         extension_settings.internal_states.prompts = extension_settings.internal_states.prompts || {};
         extension_settings.internal_states.custom_states = extension_settings.internal_states.custom_states || [];
@@ -317,6 +336,181 @@ import {
         }
     }
 
+    function isPlainObject(value) {
+        return value && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    function extractJsonFromText(text) {
+        if (!text) return null;
+        const start = text.indexOf('{');
+        if (start === -1) return null;
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        for (let i = start; i < text.length; i++) {
+            const ch = text[i];
+            if (inString) {
+                if (escape) {
+                    escape = false;
+                } else if (ch === '\\') {
+                    escape = true;
+                } else if (ch === '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (ch === '"') {
+                inString = true;
+            } else if (ch === '{') {
+                depth++;
+            } else if (ch === '}') {
+                depth--;
+                if (depth === 0) {
+                    const candidate = text.slice(start, i + 1);
+                    try {
+                        const parsed = JSON.parse(candidate);
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            return parsed;
+                        }
+                    } catch { /* keep scanning for another candidate */ }
+                }
+            }
+        }
+        return null;
+    }
+
+    function extractStateJson(text) {
+        if (!text) return null;
+        const match = String(text).match(HIDDEN_STATES_REGEX);
+        if (match && match[0]) {
+            const parsed = extractJsonFromText(match[0]);
+            if (parsed) {
+                return parsed;
+            }
+        }
+        return extractJsonFromText(text);
+    }
+
+    function mergeState(update) {
+        const state = getState();
+        let changed = false;
+        for (const [key, value] of Object.entries(update)) {
+            if (key === 'version') continue;
+            if (!isPlainObject(value)) {
+                if (JSON.stringify(state.modules[key]) !== JSON.stringify(value)) {
+                    state.modules[key] = value;
+                    changed = true;
+                }
+                continue;
+            }
+            const target = key === 'world'
+                ? (state.world = state.world || {})
+                : (state.modules[key] = state.modules[key] || {});
+            if (isPlainObject(target)) {
+                for (const [k2, v2] of Object.entries(value)) {
+                    if (JSON.stringify(target[k2]) !== JSON.stringify(v2)) {
+                        target[k2] = v2;
+                        changed = true;
+                    }
+                }
+            } else {
+                state.modules[key] = value;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    function onMessageReceived() {
+        try {
+            const context = SillyTavern.getContext();
+            const chat = context?.chat || [];
+            if (chat.length === 0) return;
+            const last = chat[chat.length - 1];
+            if (!last || last.is_user) return;
+            const update = extractStateJson(String(last.mes || ''));
+            if (update === null) {
+                lastParseInfo = { time: Date.now(), status: 'none' };
+                renderWindowBody();
+                return;
+            }
+            mergeState(update);
+            lastParseInfo = { time: Date.now(), status: 'parsed' };
+            saveChatDebounced();
+            applyExtensionPrompts();
+            renderWindowBody();
+        } catch (err) {
+            console.error('Internal States: failed to parse state update', err);
+        }
+    }
+
+    function renderValue(value) {
+        if (value === null || value === undefined || value === '') {
+            return '<span class="internal-states-muted">none</span>';
+        }
+        if (typeof value === 'boolean' || typeof value === 'number') {
+            return String(value);
+        }
+        if (typeof value === 'string') {
+            return escapeHtml(value);
+        }
+        if (Array.isArray(value)) {
+            if (value.length === 0) {
+                return '<span class="internal-states-muted">none</span>';
+            }
+            return '<ul>' + value.map(item => '<li>' + renderValue(item) + '</li>').join('') + '</ul>';
+        }
+        if (isPlainObject(value)) {
+            const entries = Object.entries(value);
+            if (entries.length === 0) {
+                return '<span class="internal-states-muted">none</span>';
+            }
+            return '<div class="internal-states-object">' + entries.map(([key, val]) => {
+                return '<div class="internal-states-field"><span class="internal-states-key">' + escapeHtml(key) + '</span><span class="internal-states-field-value">' + renderValue(val) + '</span></div>';
+            }).join('') + '</div>';
+        }
+        return escapeHtml(String(value));
+    }
+
+    function getModuleSummary(state, id) {
+        const data = state.modules[id];
+        if (!data || !isPlainObject(data)) return '';
+        switch (id) {
+            case 'dnd_simulator':
+                return 'DC ' + (data.lockedDc ?? '?') + ' · Roll ' + (data.rollUser ?? '?') + (data.outcome ? ' · ' + data.outcome : '');
+            case 'relationships': {
+                const n = Object.keys(data.pairs || {}).length;
+                return n + ' pair' + (n === 1 ? '' : 's');
+            }
+            case 'gm_notebook': {
+                const n = (data.entries || []).length;
+                return n + ' entr' + (n === 1 ? 'y' : 'ies');
+            }
+            case 'chekhovs_gun': {
+                const a = (data.active || []).length;
+                const l = (data.locked || []).length;
+                const f = (data.fired || []).length;
+                return 'Active ' + a + ' · Locked ' + l + ' · Fired ' + f;
+            }
+            case 'internal_agenda': {
+                const n = Object.keys(data.agendas || {}).length;
+                return n + ' agenda' + (n === 1 ? '' : 's');
+            }
+            case 'inventory': {
+                const n = (data.inv || []).length;
+                return n + ' item' + (n === 1 ? '' : 's');
+            }
+            case 'world_sim':
+                return data.event ? String(data.event).slice(0, 40) : 'roll ' + (data.roll ?? '?');
+            case 'internal_thoughts': {
+                const n = (data.thoughts || []).length;
+                return n + ' thought' + (n === 1 ? '' : 's');
+            }
+            default:
+                return '';
+        }
+    }
+
     function renderWindowBody() {
         const body = document.getElementById('internal-states-body');
         if (!body) return;
@@ -333,16 +527,83 @@ import {
             return;
         }
 
+        const state = getState();
+        const hasState = Object.keys(state.modules).length > 0 || Object.keys(state.world || {}).length > 0;
+
+        if (!hasState) {
+            body.innerHTML = `
+                <div class="internal-states-placeholder">
+                    <div class="internal-states-placeholder-title">No internal state yet</div>
+                    <div class="internal-states-placeholder-text">The AI writes the state JSON inside &lt;internal_states&gt; at the end of its reply. Send a message to generate one.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const world = state.world || {};
+        const worldHtml = Object.keys(world).length > 0
+            ? `
+                <details class="internal-states-module" open>
+                    <summary><span>🌍</span><span>World</span><span class="internal-states-summary-line">turn ${world.turn ?? '?'}</span></summary>
+                    <div class="internal-states-module-body">${renderValue(world)}</div>
+                </details>
+            `
+            : '';
+
+        const modulesHtml = enabled.map(stateDef => {
+            const data = state.modules[stateDef.id];
+            if (data === undefined) return '';
+            const summary = getModuleSummary(state, stateDef.id);
+            return `
+                <details class="internal-states-module" open>
+                    <summary><span>${escapeHtml(stateDef.icon)}</span><span>${escapeHtml(stateDef.name)}</span>${summary ? `<span class="internal-states-summary-line">${escapeHtml(summary)}</span>` : ''}</summary>
+                    <div class="internal-states-module-body">${renderValue(data)}</div>
+                </details>
+            `;
+        }).join('');
+
+        const statusText = lastParseInfo.status === 'parsed' ? 'parsed' : (lastParseInfo.status === 'failed' ? 'parse failed' : 'no update');
+        const timeText = lastParseInfo.time ? ' · ' + new Date(lastParseInfo.time).toLocaleTimeString() : '';
+
         body.innerHTML = `
-            <div class="internal-states-module-list">
-                ${enabled.map(state => `
-                    <div class="internal-states-module-row">
-                        <span class="internal-states-module-icon">${escapeHtml(state.icon)}</span>
-                        <span class="internal-states-module-name">${escapeHtml(state.name)}</span>
-                    </div>
-                `).join('')}
+            <div class="internal-states-toolbar">
+                <span class="internal-states-update-info">Last update: ${statusText}${timeText}</span>
+                <button class="internal-states-icon-btn" id="internal-states-raw-toggle" title="Toggle raw JSON"><i class="fa-solid fa-braces"></i></button>
+                <button class="internal-states-icon-btn" id="internal-states-clear" title="Clear state"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <pre class="internal-states-raw" id="internal-states-raw"></pre>
+            <div class="internal-states-modules">
+                ${worldHtml}
+                ${modulesHtml}
             </div>
         `;
+
+        const rawPre = document.getElementById('internal-states-raw');
+        if (rawPre) {
+            rawPre.textContent = JSON.stringify(state, null, 2);
+        }
+        document.getElementById('internal-states-raw-toggle')?.addEventListener('click', toggleRawJson);
+        document.getElementById('internal-states-clear')?.addEventListener('click', clearState);
+    }
+
+    function toggleRawJson() {
+        const raw = document.getElementById('internal-states-raw');
+        if (raw) {
+            raw.classList.toggle('is-visible');
+        }
+    }
+
+    function clearState() {
+        if (!confirm('Clear the current chat\'s internal state? The AI will rebuild it on the next turn.')) return;
+        chat_metadata.internalStates = { version: 1, modules: {}, world: {} };
+        saveChatDebounced();
+        applyExtensionPrompts();
+        renderWindowBody();
+    }
+
+    function refreshWindowBody() {
+        if (!windowCreated) return;
+        renderWindowBody();
     }
 
     function createWindow() {
@@ -413,6 +674,7 @@ import {
     function showWindow() {
         createWindow();
         setWindowVisible(true);
+        renderWindowBody();
         updateStatus();
     }
 
@@ -884,6 +1146,9 @@ import {
 
             eventSource.on(event_types.CHAT_CHANGED, applyExtensionPrompts);
             eventSource.on(event_types.GROUP_UPDATED, applyExtensionPrompts);
+            eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, refreshWindowBody);
+            eventSource.on(event_types.CHAT_CHANGED, refreshWindowBody);
+            eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
 
             await loadSettings();
 

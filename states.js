@@ -6,30 +6,27 @@ export const INTERNAL_STATES = [
         description: 'Dice, skills, and character-driven simulation of in-world actions.',
         defaultEnabled: true,
         cleanupVars: ['dndTemplate', 'dndSimCoTHQ1', 'dndSimCoT'],
+        stateVars: ['dndTemplate'],
         prompt: `{{// Internal States. Turn this on if you want to turn your RP into a DnD experience. This is my personal fav Internal State. It ensures all skilled actions- socially and physically- are dictated by dice. This completely eliminates positivity bias. It also allows the LLM to blame outcomes on the dice for things such as harm, violence, sex ect which assists with plot momentum and bypassing guardrails. This can be used with items, skills, inventory to allow for passive boosts to rolls.}}{{trim}}
 
 <internal_dndsim>
-{{setvar::dndTemplate::<details><summary>🎲 DND TASK SIM</summary>- <b>Task:</b> [Actor] attempts [Action]<br>- <b>Locked DC:</b> [Value]<br>- <b>Roll:</b> <b>User Roll:</b> <b>NPC Roll:</b>   | <b>Delta:</b> [Roll minus DC established in Gate 1 - do this for each. ]<br>- <b>Outcome:</b> [Degree & consequence]</details>}}
-
 [DND SIMULATION LOGIC]
 AI Role: Impartial roguelite Game Master. The dice are always right; never fudge DCs or outcomes to protect characters.
 Trigger: Any character ({{user}} or NPC) completes a skilled activity (action, coercion/persuasion/ insight). Ignore trivial daily tasks (these are always auto-success, no roll).
 Order of Operations (Execute strictly in this order to prevent bias):
   1. Lock DC for {{user}} or NPC in scene: During processing reasoning in internal scratchpad CoT, establish the DC (Easy:1-5, Moderate: 5-10, Hard:10-15, Impossible:15-20) first based strictly on known character proficiency and items/skills. Lock this number. Never change DC once
 Established.
-  2. Evaluate Roll: ONLY AFTER locking the DC, compare it to the d20 roll generated in reasoning through the tasks of your internal scratchpad. Calculate Delta (Roll - DC). Never compare {{user}} roll to NPC roll. Only compare their rolls to the DC you established for the skill check. If activity isn't skilled - skip their roll. 
+  2. Evaluate Roll: ONLY AFTER locking the DC, compare it to the d20 roll generated in reasoning through the tasks of your internal scratchpad. Calculate Delta (Roll - DC). Never compare {{user}} roll to NPC roll. Only compare their rolls to the DC you established for the skill check. If activity isn't skilled - skip their roll.
   3. Outcomes:
      - Crit Success (Nat 20 OR Delta ≥ +8): Extreme reward to character, highly stylistic execution.
-     - Success (Delta 0 to +7): Task accomplished. 
+     - Success (Delta 0 to +7): Task accomplished.
      - Near Miss (Delta -1 to -3): Task fails, minor repercussions.
      - Failure (Delta -4 to -7): Task fails, moderate repercussions.
      - Crit Failure (Nat 1 OR Delta ≤ -8): Disastrous failure, significant repercussions.
 Constraint: Execute outcome seamlessly in narrative prose. Never mention rules, DC, or stats in the narrative.
-</internal_dndsim>
 
-{{setvar::dndSimCoTHQ1::- DND DC: Establish and permanently lock the logical task DC.}}
-
-{{setvar::dndSimCoT::- DND_RESULT: Populate dndTemplate using the task, locked DC, roll, delta, and outcome.}}`,
+State storage: Persist the current DND task in the Internal States JSON under the top-level key "dnd_simulator": { "task": "[Actor] attempts [Action]", "lockedDc": [Value], "rollUser": [User roll or null], "rollNpc": [NPC roll or null], "delta": [Roll minus DC], "outcome": "[Degree & consequence]" }. Include only the fields that changed this turn; unchanged fields are kept.
+</internal_dndsim>`,
     },
     {
         id: 'internal_agenda',
@@ -38,6 +35,7 @@ Constraint: Execute outcome seamlessly in narrative prose. Never mention rules, 
         description: 'Tracks each character\'s goals, plans, and shifting priorities.',
         defaultEnabled: false,
         cleanupVars: ['agendaTrackerCoT'],
+        stateVars: [],
         prompt: `{{// Internal States. This automates NPC behavior when they are off-screen (not in the current scene with you). It assigns them a goal, tracks how close they are to finishing it, and dictates what happens when they succeed.}}{{trim}}
 
 <internal_agendatracker>
@@ -70,9 +68,9 @@ Quest Integration:
 - Time-Locked Quest: When within 60 minutes of T:, the responsible NPC's agenda shifts to preparation (Step 1/max, goal tied to quest).
 - State-Locked Quest: When a dependency fires, mark quest as ACTIVE, clear lock, and have NPCs react.
 - Faction Updates: Completed alliance quests shift BOND between faction-aligned NPCs +1. Completed hostile quests shift BOND -1 and plant SIMMER.
-</internal_agendatracker>
 
-{{setvar::agendaTrackerCoT::- AGENDA_TICK: Advance OFF-SCREEN NPC Steps by +1. If Step ≥ max, apply completion effect per <internal_agendatracker> and assign a new agenda. For ON-SCREEN NPCs, verify agenda matches the scene without advancing Step.}}`,
+State storage: Persist agendas in the Internal States JSON under the top-level key "internal_agenda": { "agendas": { "[NPC Name]": { "goal": "[goal_desc]", "step": [current], "max": [max], "location": "[place]" } } }. Advance steps and apply completion effects per the rules above.
+</internal_agendatracker>`,
     },
     {
         id: 'gm_notebook',
@@ -81,14 +79,12 @@ Quest Integration:
         description: 'Keeps running notes on the scene, NPCs, locations, and open plot threads.',
         defaultEnabled: true,
         cleanupVars: ['gmNotebookTemplate', 'gmNotebookCoT', 'gmNotebookCoTGamestate'],
-        prompt: `{{// Internal States.  The GM's Notebook acts as a short-term and medium-term memory block. It is saved in a hidden HTML <details> tag at the bottom of the response, so the AI can read its own notes from the previous turn while keeping the player's view completely clean.}}{{trim}}
-
-
-{{setvar::gmNotebookTemplate::<details><summary>📓 GM'S NOTEBOOK</summary>{{getvar::gmNotebook::- [R] No active notes.}}<br></details>}}
+        stateVars: ['gmNotebook'],
+        prompt: `{{// Internal States.  The GM's Notebook acts as a short-term and medium-term memory block. It is saved in a hidden state block at the bottom of the response, so the AI can read its own notes from the previous turn while keeping the player's view completely clean.}}{{trim}}
 
 
 <internal_gmnotebook>
-Purpose: Persistent GM scratchpad for plot notes, debugging flags, and cross-turn observations (never shown to user). Stored in {{getvar::gmNotebook}}.
+Purpose: Persistent GM scratchpad for plot notes, debugging flags, and cross-turn observations (never shown to user). Stored in the Internal States JSON.
 
 Format: Pipe-separated entries. Prefix with:
 - [R] Reminder: Rules, knowledge limits, or OOC directives.
@@ -105,12 +101,10 @@ Rules:
 - Do NOT log BOND/SPARKS/GRUDGE shifts or narrative events tracked in Chekhov seeds.
 - Only log elements that lack dedicated spots in other internal states.
 - Cap: Max 20 entries. Prune the oldest when a 21st is added.
-- Storage: Update in internal states; load at GATE 1.
-</internal_gmnotebook>
+- Storage: Update in internal states.
 
-{{setvar::gmNotebookCoT::- GM_NOTEBOOK: Read <internal_gmnotebook>. Optionally add/remove/modify entries (max 20) per Rules. To persist these notes, you must write {{setvar::gmNotebook::[Your updated list of entries here]}} inside your hidden internal states block. Do NOT log Chekhov seeds, BOND/SPARK/GRUDGE changes, or anything with an existing state spot. Jot and move with no deliberation.}}
-
-{{setvar::gmNotebookCoTGamestate::Load <internal_gmnotebook> and note any entries relevant to this turn.}}`,
+State storage: Persist entries in the Internal States JSON under the top-level key "gm_notebook": { "entries": ["[R] ...", "[T] ...", "[D] ..."] }. Jot and move with no deliberation.
+</internal_gmnotebook>`,
     },
     {
         id: 'inventory',
@@ -119,9 +113,8 @@ Rules:
         description: 'Tracks items, equipment, feats, and earned titles per character.',
         defaultEnabled: false,
         cleanupVars: ['invTemplate'],
+        stateVars: ['invTemplate'],
         prompt: `{{// Internal States. Turn this on to work in tandem with DnD sim. It tracks inventory, items, tools, skills, and titles that buff or debuff dice rolls.}}{{trim}}
-
-{{setvar::invTemplate::<details><summary>🎒 INV & SKILLS</summary>- <b>Inv:</b> [items]<br>- <b>Titles/Skills:</b> [traits]<br>- <b>Status:</b> [conditions]<br>- <b>Mods:</b> [+/- applied to roll/DC]</details>}}
 
 <internal_inv>
 Tracking (Track strictly for {{user}} only; do not track for NPCs):
@@ -135,9 +128,11 @@ DND Modifiers (Integrates strictly with <internal_dndsim>):
 - Domain Lock: Modifiers apply only to logical domains (e.g., Charmer affects social; Slayer affects combat).
 
 Constraints:
-1. Keep all math, stats, and modifiers strictly inside the HTML block.
+1. Keep all math, stats, and modifiers strictly inside the state JSON.
 2. Never write stats, modifier values, or mechanical buff names in narrative prose. Describe only physical actions, item usage, and condition effects.
 3. You (as DM) have final authority on whether items, skills, or titles logically apply to a roll.
+
+State storage: Persist in the Internal States JSON under the top-level key "inventory": { "inv": ["[items]"], "titlesSkills": ["[traits]"], "status": ["[conditions]"], "mods": ["+/- applied to roll/DC"] }.
 </internal_inv>`,
     },
     {
@@ -147,17 +142,16 @@ Constraints:
         description: 'Models bonds, trust, and relationship dynamics between characters.',
         defaultEnabled: true,
         cleanupVars: ['bondsTemplate', 'bondCoT1', 'bondCoT2'],
+        stateVars: ['bondsTemplate', 'bond_*', 'sparks_*', 'grudge_*'],
         prompt: `{{// Internal States. An autonomous relationship engine that manages trust (BOND), affection (Sparks), and resentment (Grudge) between all characters, including independent relationships between NPCs. Under the hood, characters earn temporary Sparks through positive interactions that periodically convert into permanent BOND levels, while negative slights build Grudges that halve their relationship progress. This social status dynamically alters how characters behave, unlocks specific physical intimacy thresholds, modulates their baseline emotional states (VAD), and directly lowers or raises the difficulty (DC) of your DND task checks depending on how much they trust or dislike the target}}{{trim}}
 
 <internal_bondtracker>
-{{setvar::bondsTemplate::<details><summary>💚 BONDS</summary><br>- <b>[NPC1]</b> ↔ <b>[NPC2]</b> | BOND: [Value] | Sparks: [Value] | Grudge: [Value]<br></details>}}
+Purpose: Persistent relationship engine (-5 to +20).
 
-Purpose: Persistent relationship engine (-5 to +20). Macro values persist automatically across turns; do not track manually in narrative.
-
-Macros (X and Y are 2-letter character codes, e.g., LS=Luna, US=User):
-- BOND: {{getvar::bond_X_Y}} (Current relationship, -5 to +20)
-- Sparks: {{getvar::sparks_X_Y}} (Affection counter)
-- Grudge: {{getvar::grudge_X_Y}} (Resentment counter)
+Pairs: Each relationship is stored by pair label (e.g., "Luna↔User") with three values:
+- BOND: (Current relationship, -5 to +20)
+- Sparks: (Affection counter)
+- Grudge: (Resentment counter)
 
 Tiers & Behaviors:
 - -5 (Severed) to -3: Cold, hostile, aggressive. Verbal weapons; avoids proximity.
@@ -201,14 +195,9 @@ DC Modifiers:
 
 NPC-to-NPC: All rules, gates, and mechanics apply identically to relationships between NPC pairs, completely independent of the user.
 
-Storage (NPC AGENDAS section): "BOND: {{char}}↔{{user}}={{getvar::bond_char_user}} | Sparks: {{getvar::sparks_char_user}} | Grudge: {{getvar::grudge_char_user}}"
+State storage: Persist relationship pairs in the Internal States JSON under the top-level key "relationships": { "pairs": { "[NPC1]↔[NPC2]": { "bond": [Value], "sparks": [Value], "grudge": [Value] } } }. Track nightly drift, Sparks conversion every 5 turns, and Grudge conversion every 3 turns per the rules above.
 Constraint: Never state numbers or stats in prose. Show relationship tiers strictly through behavioral changes.
-</internal_bondtracker>
-
-{{setvar::bondCoT1::- Nightly Drift (At Midnight): If BOND is +3 to +7, drift -1 toward 0. If BOND is +8 to +14, drift -1 toward +7. If BOND is +15+, no drift.
-- Grudge Conversion Check: If turn % 3 == 0 and Grudge >= 5, trigger BOND -1 reduction and reset Grudge to 0.}}
-
-{{setvar::bondCoT2::- Sparks Conversion Check: If turn % 5 == 0 and Sparks >= 7, trigger BOND +1 conversion and reset Sparks to 0.}}`,
+</internal_bondtracker>`,
     },
     {
         id: 'world_sim',
@@ -217,9 +206,8 @@ Constraint: Never state numbers or stats in prose. Show relationship tiers stric
         description: 'Simulates world state, factions, and consequences beyond the immediate scene.',
         defaultEnabled: false,
         cleanupVars: ['worldsimRoll', 'worldsimTemplate', 'worldsimCoT'],
+        stateVars: ['worldsimTemplate', 'worldsimRoll'],
         prompt: `{{// Internal States.  Turn on if you want to create random events / activities in your RP to make the world feel more alive.}}{{trim}}
-
-{{setvar::worldsimRoll::{{roll::1d20}}}}{{setvar::worldsimTemplate::<details><summary>🌎 WORLD SIM</summary>- <b>Active Table:</b> [Standard or Duo Table selected]<br>- <b>World Sim Roll:</b> {{getvar::worldsimRoll}}<br>- <b>Event:</b> [Selected Event - Brief description of off-screen shift]</details>}}{{trim}}
 
 <internal_worldsim>
 Rules:
@@ -251,9 +239,10 @@ DuoTable (≤2 named NPCs OR no off-screen):
   15-16: POWER_SHIFT — Sudden mental pivot (e.g., confidence turns to vulnerability, timid becomes brave).
   17-18: MUNDANE_INTERRUPTION — Wrong-number call, phone rings, or ambient chirp.
 
-Roll: {{getvar::worldsimRoll}}
-</internal_worldsim>
-{{setvar::worldsimCoT::- WORLD_SIM: Check worldsimRoll (Roll: {{getvar::worldsimRoll}}). Select event from StandardTable or DuoTable per rules and populate worldsimTemplate.}}`,
+Roll: Generate a d20 roll in your reasoning, then select the event from StandardTable or DuoTable per the rules.
+
+State storage: Persist in the Internal States JSON under the top-level key "world_sim": { "table": "[Standard or Duo]", "roll": [d20], "event": "[Selected Event - Brief description of off-screen shift]" }.
+</internal_worldsim>`,
     },
     {
         id: 'chekhovs_gun',
@@ -262,9 +251,8 @@ Roll: {{getvar::worldsimRoll}}
         description: 'Records planted details and promises so they pay off later.',
         defaultEnabled: true,
         cleanupVars: ['chekhovTemplate', 'chekhovsGunCoT'],
-        prompt: `{{// Internal States.  The Chekhov’s Gun Tracker acts as a narrative payoff engine that automatically records minor details, foreshadowed comments, or scheduled appointments as hidden narrative debt "Bullets" in the background. Every turn, loaded Bullets age and have a chance of being randomly fired based on d20 rolls, becoming much easier to fire if relevant characters, locations, or emotional moods are present in the current scene. For the user, this ensures that minor elements mentioned earlier in the chat naturally and logically resurface as major plot points later on, making the story feel incredibly cohesive and deliberate.}}{{trim}}
-
-{{setvar::chekhovTemplate::<details><summary>🔫 CHEKHOV'S GUN</summary><br>- Active: {{getvar::chekhovActive::None}} | Locked: {{getvar::chekhovLocked::None}} | Fired: [fired]<br></details>}}
+        stateVars: ['chekhovTemplate', 'chekhovActive', 'chekhovLocked'],
+        prompt: `{{// Internal States.  The Chekhov's Gun Tracker acts as a narrative payoff engine that automatically records minor details, foreshadowed comments, or scheduled appointments as hidden narrative debt "Bullets" in the background. Every turn, loaded Bullets age and have a chance of being randomly fired based on d20 rolls, becoming much easier to fire if relevant characters, locations, or emotional moods are present in the current scene. For the user, this ensures that minor elements mentioned earlier in the chat naturally and logically resurface as major plot points later on, making the story feel incredibly cohesive and deliberate.}}{{trim}}
 
 <internal_chekhovguntracker>
 Format: [BULLET: desc] (weight: 1-3, age: 0/12) [depends: prereq] [secret]
@@ -279,24 +267,17 @@ Mechanics:
   * Proximity Mods: -2 if subject NPC is speaking/addressed; -1 if subject NPC is present; -1 if location matches current scene; -1 if emotional tone matches current mood.
   * Scene Mod: High Momentum = -2 | Steady = 0 | Slow Burn = +2
   * Urgency Mod: -2 if deadline is <= 2 minutes or next story beat.
-- Firing: If rollD20 >= effective threshold AND Bullet age >= 4, mark active=1, fire the Bullet, and integrate into the narrative. Skip if no natural, elegant opening exists or if age < 4.
+- Firing: Generate a d20 roll in your reasoning per eligible Bullet. If roll >= effective threshold AND Bullet age >= 4, mark active=1, fire the Bullet, and integrate into the narrative. Skip if no natural, elegant opening exists or if age < 4.
 - Pruning: Jam if rollD20 == 1 (fails, may retry next turn). Prune non-locked Bullets at age >= 12. If active Bullets > 20, prune the oldest/lowest weight. Pruned Bullets fire silently and move to the FIRED list.
 - Loading Logic (Narrative Debt): Scan narrative, check for narrative debt (unresolved setups, active promises, foreshadowed elements, emotional tension, or physical setups in narrative prose). If narrative debt exists, load new Bullets corresponding to the debt (load 1-2 Bullets per turn based on identified debt).
-- Coincidence: If {{roll::1d20}} = Nat 20 and >= 2 unrelated Bullets fire, all active Bullets get a -4 threshold this turn.
-- Calamity: If {{roll::1d20}} = Nat 1 and >= 2 unrelated Bullets fire, all fire under the worst possible interpretation.
+- Coincidence: If a d20 roll = Nat 20 and >= 2 unrelated Bullets fire, all active Bullets get a -4 threshold this turn.
+- Calamity: If a d20 roll = Nat 1 and >= 2 unrelated Bullets fire, all fire under the worst possible interpretation.
 
 Scheduling:
 - If a future time is mentioned (e.g., "in 5 mins", "noon"), load a TIME-LOCKED Bullet \`[LOCKED: T:HH:MM]\` based on the header time. Apply a -2 threshold for urgency within 2 minutes of the deadline. NPCs return naturally when the Bullet fires (never narrate the locking mechanics).
 
-chekhovD20:
-Seed1: {{roll::1d20}}
-Seed2: {{roll::1d20}}
-Seed3: {{roll::1d20}}
-Seed4: {{roll::1d20}}
-Seed5: {{roll::1d20}}
-</internal_chekhovguntracker>
-
-{{setvar::chekhovsGunCoT::- CHEKHOV_FIRE: Unlock eligible Bullets. Age unlocked Bullets +1; prune if age >= 12. Verify age minimum rule (must be age >= 4 to fire). For up to 5 loaded Bullets with age >= 4, check chekhovD20.Seed# vs effective threshold (base - age - mods). Fire if roll >= threshold, age >= 4, and a natural opening exists (if none → VETO and reload into gun); jam/prune on Nat 1. Convert future time references (e.g., "tonight", "tomorrow") to absolute T:HH:MM locks. Loading Logic: scan narrative, check for narrative debt; if yes, load Bullets into the gun. Prune oldest/least impactful if over capacity (>20).}}`,
+State storage: Persist Bullets in the Internal States JSON under the top-level key "chekhovs_gun": { "active": ["[BULLET: desc] (weight: 1-3, age: 0/12) [depends: prereq] [secret]", ...], "locked": ["[LOCKED: T:HH:MM] [BULLET: desc]", ...], "fired": ["[BULLET: desc]", ...] }. Age eligible Bullets, run the firing checks, and load new Bullets per the mechanics above.
+</internal_chekhovguntracker>`,
     },
     {
         id: 'internal_thoughts',
@@ -305,16 +286,17 @@ Seed5: {{roll::1d20}}
         description: 'Renders each character\'s private thoughts and unfiltered reactions.',
         defaultEnabled: true,
         cleanupVars: ['thoughtsTemplate'],
+        stateVars: ['thoughtsTemplate'],
         prompt: `{{// Internal States. Shows what the NPCs are
 Thinking! It's fun- helps with grounding the plot and moving NPC actions forward}}{{trim}}
-
-{{setvar::thoughtsTemplate::<details><summary>🧠 INTERNAL THOUGHTS</summary><br>- <b>[NPC Name]</b> | Internal Thoughts: <br></details>}}
 
 <internal_npcthoughts>
 Protocol:
 1. NPC Spotlight: Select up to 3 NPCs. Prioritize on-screen NPCs. If selecting off-screen NPCs, you must specify their current location and active task.
 2. Format: Write 1 to 3 lines of internal thoughts per NPC. Thoughts must be fragmented, chaotic, impulsive, and raw, but strictly true to their established persona, current VAD / instincts, and current emotions.
 3. Influence: Use these internal thoughts to naturally motivate the NPC's next physical actions or narrative decisions.
+
+State storage: Persist thoughts in the Internal States JSON under the top-level key "internal_thoughts": { "thoughts": [ { "npc": "[NPC Name]", "text": "[thought]" } ] }. Keep up to 3 NPCs.
 </internal_npcthoughts>`,
     },
 ];
@@ -324,62 +306,27 @@ export const MASTER_STATE = {
     name: 'Internal States (Master)',
     icon: '👾',
     alwaysOn: true,
-    description: 'Always-on master block. Assembles the enabled state templates into the hidden <internal_states> HTML block at the end of every reply. Editable.',
-    prompt: `{{// This is our biggest change in the Freaky Frankenstein 5 series. FF4 introduced Better Narrative Drive Plot Momentum Block. This is called Internal States and replaces the old plot momentum block. It's significantly more complex and modular. It acts as a growing game master box location based on the toggles you turn on. This will be a secret hidden block
-That contains RPG elements, NPC thoughts, secrets, lies goals, factions, relationships status, etc. It MUST be used with regex to avoid token bloat. This will GREATLY enhance your RP when used correctly and FF5 is built around this. THIS IS THE MASTER TOGGLE. IT MUST BE ON FOR INTERNAL STATES TO WORK.}}{{trim}}
+    description: 'Always-on master block. Maintains the per-chat Internal State JSON (game state) that the AI updates each turn. Editable.',
+    prompt: `{{// This is our biggest change in the Freaky Frankenstein 5 series. FF4 introduced Better Narrative Drive Plot Momentum Block. This is called Internal States and replaces the old plot momentum block. It's significantly more complex and modular. It acts as a growing game master box location based on the toggles you turn on. This is a secret hidden block containing RPG elements, NPC thoughts, secrets, lies goals, factions, relationships status, etc. THIS IS THE MASTER TOGGLE. IT MUST BE ON FOR INTERNAL STATES TO WORK.}}{{trim}}
 
 <internal_states>
-Rules for HTML Generation:
-1. Position: Append this entire block as raw HTML at the very end of every response.
-2. Anti-Truncation: Never skip, shorten, or delete any <details> sections. Generate every block shown in the template; if a block is empty or has no updates, write "None".
-3. Formatting: Leave exactly one blank line between each nested <details> block to ensure correct rendering.
-4. Style: Use a telegraphic, dense, and concise style inside the HTML block only. Do not use markdown codeblocks within the HTML.
-5. Wrapper: Wrap the entire output in <!-- GFX_START --> and <!-- GFX_END --> tags.
-
-Template:
+Internal State JSON Protocol:
+1. The "CURRENT INTERNAL STATE JSON" section later in this message is the persisted game state for this chat. Read it every turn; it survives between turns.
+2. Reason about each enabled module using its rules (DND SIMULATION LOGIC, BOND tracker, Chekhov's Gun, GM Notebook, Internal Agenda, World Sim, Inventory, Internal Thoughts), then update the state to reflect what happened this turn.
+3. If any state changed, append an update block at the very end of your reply:
 <!-- GFX_START -->
 <internal_states>
-<details>
-  <summary>🎬 INTERNAL STATES (Turn: [ct]) </summary>
-  
-  <details>
-    <summary>👤 NPC AGENDAS</summary>
-    - <b>[NPC Name]</b> | Agenda: [task] | Aware: [secrets] | Fibs: [lies_told] | Circle: [allies] | Body: [state/condition]
-  </details>
-
-  <details>
-    <summary>👤 NPC LOCATIONS</summary>
-    - <b>[NPC Name]</b> | Location: [coords/scene, current activity]
-  </details>
-
-  <details>
-    <summary>🏳️ FACTIONS</summary>
-    - <b>[Faction Name]</b> | Goal: [target] | Intel: [lore] | Fibs: [lies] | State: [morale] | Conflict: [internal] | Relations: [rivalries]
-  </details>
-
-{{getvar::bondsTemplate}}
-
-  <details>
-    <summary>📜 QUESTS</summary>
-    - <b>Main</b> | Objective: [obj/progress/reward]
-    - <b>Side</b> | Objective: [obj/reward]
-  </details>
-
-  {{getvar::invTemplate}}
-  {{getvar::chekhovTemplate}}
-  {{getvar::thoughtsTemplate}}
- {{getvar::gmNotebookTemplate}}
-  {{getvar::dndTemplate}}
-  {{getvar::worldsimTemplate}}
-
-  <details>
-    <summary>🌌 PHYSICS, ENGINE & WORLD</summary>
-    - Env: [hazards/magic]
-    - Physics: [spatial positioning of scene]
-  </details>
-
-</details>
+{"dnd_simulator": {"lockedDc": 12, "outcome": "Success"}, "world": {"turn": 4}}
 </internal_states>
 <!-- GFX_END -->
+
+Update block rules:
+- Include ONLY the top-level module keys that changed. Do not repeat unchanged modules.
+- Inside a module, include only the fields you changed; the extension keeps all other fields as they were.
+- "world" holds the master state: { "turn": [current turn], "npcAgendas": [ {"name": "[NPC Name]", "agenda": "[task]", "aware": "[secrets]", "fibs": "[lies told]", "circle": "[allies]", "body": "[state/condition]"} ], "npcLocations": [ {"name": "[NPC Name]", "location": "[coords/scene, current activity]"} ], "factions": [ {"name": "[Faction]", "goal": "[target]", "intel": "[lore]", "fibs": "[lies]", "state": "[morale]", "conflict": "[internal]", "relations": "[rivalries]"} ], "quests": { "main": ["Objective: [obj/progress/reward]"], "side": ["Objective: [obj/reward]"] }, "physics": { "env": "[hazards/magic]", "physics": "[spatial positioning of scene]" } }. Update it when these change.
+- Module keys: dnd_simulator, internal_agenda, gm_notebook, inventory, relationships, world_sim, chekhovs_gun, internal_thoughts, plus any custom module.
+- Valid JSON only: no markdown fences, no trailing commas, no comments, no HTML inside the JSON. Keep it compact.
+- If nothing changed this turn, omit the update block entirely.
+- Never mention the JSON or these mechanics in narrative prose.
 </internal_states>`,
 };
