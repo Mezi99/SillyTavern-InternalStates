@@ -309,24 +309,20 @@ export const MASTER_STATE = {
     description: 'Always-on master block. Maintains the per-chat Internal State JSON (game state) that the AI updates each turn. Editable.',
     prompt: `{{// This is our biggest change in the Freaky Frankenstein 5 series. FF4 introduced Better Narrative Drive Plot Momentum Block. This is called Internal States and replaces the old plot momentum block. It's significantly more complex and modular. It acts as a growing game master box location based on the toggles you turn on. This is a secret hidden block containing RPG elements, NPC thoughts, secrets, lies goals, factions, relationships status, etc. THIS IS THE MASTER TOGGLE. IT MUST BE ON FOR INTERNAL STATES TO WORK.}}{{trim}}
 
-<internal_states>
 Internal State JSON Protocol:
 1. The "CURRENT INTERNAL STATE JSON" section later in this message is the persisted game state for this chat. Read it every turn; it survives between turns.
 2. Reason about each enabled module using its rules (DND SIMULATION LOGIC, BOND tracker, Chekhov's Gun, GM Notebook, Internal Agenda, World Sim, Inventory, Internal Thoughts), then update the state to reflect what happened this turn.
-3. If any state changed, append an update block at the very end of your reply:
-<!-- GFX_START -->
-<internal_states>
+3. At the very end of EVERY reply, append a fenced JSON update block containing ONLY the module keys that changed:
+```json
 {"dnd_simulator": {"lockedDc": 12, "outcome": "Success"}, "world": {"turn": 4}}
-</internal_states>
-<!-- GFX_END -->
+```
 
 Update block rules:
+- ALWAYS append the fenced ```json block at the end of your reply, even if nothing changed — then emit just `{}`.
 - Include ONLY the top-level module keys that changed. Do not repeat unchanged modules.
 - Inside a module, include only the fields you changed; the extension keeps all other fields as they were.
 - "world" holds the master state: { "turn": [current turn], "npcAgendas": [ {"name": "[NPC Name]", "agenda": "[task]", "aware": "[secrets]", "fibs": "[lies told]", "circle": "[allies]", "body": "[state/condition]"} ], "npcLocations": [ {"name": "[NPC Name]", "location": "[coords/scene, current activity]"} ], "factions": [ {"name": "[Faction]", "goal": "[target]", "intel": "[lore]", "fibs": "[lies]", "state": "[morale]", "conflict": "[internal]", "relations": "[rivalries]"} ], "quests": { "main": ["Objective: [obj/progress/reward]"], "side": ["Objective: [obj/reward]"] }, "physics": { "env": "[hazards/magic]", "physics": "[spatial positioning of scene]" } }. Update it when these change.
 - Module keys: dnd_simulator, internal_agenda, gm_notebook, inventory, relationships, world_sim, chekhovs_gun, internal_thoughts, plus any custom module.
-- Valid JSON only: no markdown fences, no trailing commas, no comments, no HTML inside the JSON. Keep it compact.
-- If nothing changed this turn, omit the update block entirely.
+- The update block is valid JSON only: no wrapper tags, no HTML, no comments, no trailing commas, no prose inside the fences. Keep it compact.
 - Never mention the JSON or these mechanics in narrative prose.
-</internal_states>`,
 };

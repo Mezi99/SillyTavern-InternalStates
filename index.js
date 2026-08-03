@@ -256,13 +256,30 @@ import {
         }, 1000);
     }
 
+    function unescapeHtml(str) {
+        return String(str)
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&');
+    }
+
     function cleanHiddenStateBlock(element) {
         if (!element) return;
         const html = element.innerHTML;
-        if (!html.includes('GFX_START') && !html.includes('<internal_states>')) {
+        if (!html.includes('GFX_START') && !html.includes('<internal_states>') && !html.includes('```')) {
             return;
         }
-        const cleaned = html.replace(HIDDEN_STATES_REGEX, '');
+        let cleaned = html.replace(HIDDEN_STATES_REGEX, '');
+        cleaned = cleaned.replace(/```(?:json)?\s*\n?([\s\S]*?)```/gi, function (match, content) {
+            try {
+                const parsed = JSON.parse(unescapeHtml(content.trim()));
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return '';
+                }
+            } catch { /* not JSON - keep the code fence visible */ }
+            return match;
+        });
         if (cleaned !== html) {
             element.innerHTML = cleaned;
         }
@@ -340,14 +357,38 @@ import {
         return value && typeof value === 'object' && !Array.isArray(value);
     }
 
+    function stripThinkingTags(text) {
+        return String(text)
+            .replace(/<think>[\s\S]*?<\/think>/gi, '')
+            .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    }
+
+    function extractFencedJson(text) {
+        if (!text) return null;
+        let result = null;
+        const fenceRegex = /```(?:json)?\s*\n?([\s\S]*?)```/gi;
+        let match;
+        while ((match = fenceRegex.exec(text)) !== null) {
+            const content = match[1].trim();
+            if (!content) continue;
+            try {
+                const parsed = JSON.parse(content);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    result = parsed;
+                }
+            } catch { /* keep scanning for a later candidate */ }
+        }
+        return result;
+    }
+
     function extractJsonFromText(text) {
         if (!text) return null;
-        const start = text.indexOf('{');
-        if (start === -1) return null;
-        let depth = 0;
+        let result = null;
         let inString = false;
         let escape = false;
-        for (let i = start; i < text.length; i++) {
+        let depth = 0;
+        let start = -1;
+        for (let i = 0; i < text.length; i++) {
             const ch = text[i];
             if (inString) {
                 if (escape) {
@@ -362,33 +403,43 @@ import {
             if (ch === '"') {
                 inString = true;
             } else if (ch === '{') {
+                if (depth === 0) {
+                    start = i;
+                }
                 depth++;
             } else if (ch === '}') {
                 depth--;
-                if (depth === 0) {
+                if (depth === 0 && start !== -1) {
                     const candidate = text.slice(start, i + 1);
                     try {
                         const parsed = JSON.parse(candidate);
                         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                            return parsed;
+                            result = parsed;
                         }
                     } catch { /* keep scanning for another candidate */ }
+                    start = -1;
                 }
             }
         }
-        return null;
+        return result;
     }
 
     function extractStateJson(text) {
         if (!text) return null;
-        const match = String(text).match(HIDDEN_STATES_REGEX);
-        if (match && match[0]) {
-            const parsed = extractJsonFromText(match[0]);
+        const cleaned = stripThinkingTags(text);
+        if (!cleaned) return null;
+        const fenced = extractFencedJson(cleaned);
+        if (fenced) {
+            return fenced;
+        }
+        const legacy = cleaned.match(HIDDEN_STATES_REGEX);
+        if (legacy && legacy[0]) {
+            const parsed = extractJsonFromText(legacy[0]);
             if (parsed) {
                 return parsed;
             }
         }
-        return extractJsonFromText(text);
+        return extractJsonFromText(cleaned);
     }
 
     function mergeState(update) {
@@ -434,10 +485,14 @@ import {
                 renderWindowBody();
                 return;
             }
-            mergeState(update);
-            lastParseInfo = { time: Date.now(), status: 'parsed' };
-            saveChatDebounced();
-            applyExtensionPrompts();
+            const changed = mergeState(update);
+            if (changed) {
+                lastParseInfo = { time: Date.now(), status: 'parsed' };
+                saveChatDebounced();
+                applyExtensionPrompts();
+            } else {
+                lastParseInfo = { time: Date.now(), status: 'nochange' };
+            }
             renderWindowBody();
         } catch (err) {
             console.error('Internal States: failed to parse state update', err);
@@ -534,7 +589,7 @@ import {
             body.innerHTML = `
                 <div class="internal-states-placeholder">
                     <div class="internal-states-placeholder-title">No internal state yet</div>
-                    <div class="internal-states-placeholder-text">The AI writes the state JSON inside &lt;internal_states&gt; at the end of its reply. Send a message to generate one.</div>
+                    <div class="internal-states-placeholder-text">The AI writes the state JSON in a fenced ```json block at the end of its reply. Send a message to generate one.</div>
                 </div>
             `;
             return;
@@ -562,7 +617,7 @@ import {
             `;
         }).join('');
 
-        const statusText = lastParseInfo.status === 'parsed' ? 'parsed' : (lastParseInfo.status === 'failed' ? 'parse failed' : 'no update');
+        const statusText = lastParseInfo.status === 'parsed' ? 'parsed' : (lastParseInfo.status === 'nochange' ? 'no change' : (lastParseInfo.status === 'failed' ? 'parse failed' : 'no update'));
         const timeText = lastParseInfo.time ? ' · ' + new Date(lastParseInfo.time).toLocaleTimeString() : '';
 
         body.innerHTML = `
@@ -1007,9 +1062,9 @@ import {
         textarea.value = 'Loading...';
         try {
             const block = await assemblePromptBlock();
-            console.log('Internal States: preview block length =', block.length, '| hasInternalStatesBlock =', block.includes('<internal_states>'));
+            console.log('Internal States: preview block length =', block.length, '| hasProtocol =', block.includes('INTERNAL STATE JSON PROTOCOL'));
             let display = block || '';
-            if (!display.includes('<internal_states>')) {
+            if (!display.includes('INTERNAL STATE JSON PROTOCOL')) {
                 const raw = Object.keys(extension_prompts)
                     .filter(key => key.startsWith('internal_state'))
                     .sort()
@@ -1022,7 +1077,7 @@ import {
                     .join('\n');
                 display += '\n\n--- RAW INTERNAL STATES (block missing) ---\n\n' + (raw || '(no internal_state keys registered)');
                 display += '\n\n--- ALL OTHER REGISTERED PROMPTS ---\n\n' + (other || '(none)');
-                console.warn('Internal States: assembled block missing <internal_states>; diagnostics appended to preview');
+                console.warn('Internal States: assembled block missing protocol; diagnostics appended to preview');
             }
             textarea.value = display || '(No Internal States prompts registered. Enable the extension and at least one state.)';
         } catch (err) {
@@ -1042,7 +1097,7 @@ import {
     async function logAssembledBlock() {
         try {
             const block = await assemblePromptBlock();
-            console.log('Internal States: assembled block (' + block.length + ' chars, hasInternalStatesBlock=' + block.includes('<internal_states>') + '):\n' + (block.slice(0, 2000) || '(empty)'));
+            console.log('Internal States: assembled block (' + block.length + ' chars, hasProtocol=' + block.includes('INTERNAL STATE JSON PROTOCOL') + '):\n' + (block.slice(0, 2000) || '(empty)'));
         } catch (err) {
             console.error('Internal States: failed to assemble block at startup', err);
         }

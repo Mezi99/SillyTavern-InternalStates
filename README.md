@@ -19,7 +19,7 @@ Internal States is a modular game-master system made of independent modules:
 The extension owns a **per-chat game state** stored as JSON in the chat's metadata. Each turn it:
 
 1. Injects the current state JSON into the prompt (inside the master block at depth 4), together with the enabled module rules.
-2. Asks the model to reason about the state and, at the end of its reply, emit an update inside `<internal_states>` tags — only the module fields that changed.
+2. Asks the model to reason about the state and append a fenced ```` ```json ```` update block at the end of every reply — only the module fields that changed (`{}` if nothing changed).
 3. Parses that update on `message_received`, deep-merges it into the stored state, and persists it.
 4. Renders the state in the extension window as structured, per-module sections (raw JSON view and a "clear state" button are available from the window footer).
 
@@ -37,7 +37,7 @@ Because the state is real JSON owned by the extension, there are no `setvar`/`ge
 - Toggle **Enable Internal States** in the extension's drawer to show/hide the floating window.
 - Use the 🎛️ button in the window header (or the States drawer) to toggle individual modules on/off per chat.
 - Use the ⚙️ button to edit each module's prompt or the master protocol.
-- **Hide state blocks from chat** is ON by default: the JSON update block is stripped from the chat view but still sent to the model. Turn it OFF to see the raw block, as in the original preset.
+- **Hide state blocks from chat** is ON by default: the fenced ```json update block is stripped from the chat view but still sent to the model. Turn it OFF to see the raw block, as in the original preset.
 - The **View injected prompt** button in Settings shows the exact assembled block (rules + current state JSON) sent to the model.
 
 ## Roadmap
@@ -46,3 +46,4 @@ Because the state is real JSON owned by the extension, there are no `setvar`/`ge
 - [x] Inject enabled modules into the prompt regardless of active preset (`setExtensionPrompt`, depth 4, matching the FF5 preset)
 - [x] CoT enforcement directives embedded in each module's rules
 - [x] JSON game-state engine (v1.0.0)
+- [x] Strict fenced-JSON transport: no wrapper tags, ```` ```json ```` block on every reply, legacy `<internal_states>` parsing kept for old chats (v1.1.0)
