@@ -313,16 +313,16 @@ Internal State JSON Protocol:
 1. The "CURRENT INTERNAL STATE JSON" section later in this message is the persisted game state for this chat. Read it every turn; it survives between turns.
 2. Reason about each enabled module using its rules (DND SIMULATION LOGIC, BOND tracker, Chekhov's Gun, GM Notebook, Internal Agenda, World Sim, Inventory, Internal Thoughts), then update the state to reflect what happened this turn.
 3. At the very end of EVERY reply, append a fenced JSON update block containing ONLY the module keys that changed:
-```json
+\`\`\`json
 {"dnd_simulator": {"lockedDc": 12, "outcome": "Success"}, "world": {"turn": 4}}
-```
+\`\`\`
 
 Update block rules:
-- ALWAYS append the fenced ```json block at the end of your reply, even if nothing changed — then emit just `{}`.
+- ALWAYS append the fenced \`\`\`json block at the end of your reply, even if nothing changed — then emit just \`{}\`.
 - Include ONLY the top-level module keys that changed. Do not repeat unchanged modules.
 - Inside a module, include only the fields you changed; the extension keeps all other fields as they were.
 - "world" holds the master state: { "turn": [current turn], "npcAgendas": [ {"name": "[NPC Name]", "agenda": "[task]", "aware": "[secrets]", "fibs": "[lies told]", "circle": "[allies]", "body": "[state/condition]"} ], "npcLocations": [ {"name": "[NPC Name]", "location": "[coords/scene, current activity]"} ], "factions": [ {"name": "[Faction]", "goal": "[target]", "intel": "[lore]", "fibs": "[lies]", "state": "[morale]", "conflict": "[internal]", "relations": "[rivalries]"} ], "quests": { "main": ["Objective: [obj/progress/reward]"], "side": ["Objective: [obj/reward]"] }, "physics": { "env": "[hazards/magic]", "physics": "[spatial positioning of scene]" } }. Update it when these change.
 - Module keys: dnd_simulator, internal_agenda, gm_notebook, inventory, relationships, world_sim, chekhovs_gun, internal_thoughts, plus any custom module.
 - The update block is valid JSON only: no wrapper tags, no HTML, no comments, no trailing commas, no prose inside the fences. Keep it compact.
-- Never mention the JSON or these mechanics in narrative prose.
+- Never mention the JSON or these mechanics in narrative prose.`
 };

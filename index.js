@@ -589,7 +589,7 @@ import {
             body.innerHTML = `
                 <div class="internal-states-placeholder">
                     <div class="internal-states-placeholder-title">No internal state yet</div>
-                    <div class="internal-states-placeholder-text">The AI writes the state JSON in a fenced ```json block at the end of its reply. Send a message to generate one.</div>
+                    <div class="internal-states-placeholder-text">The AI writes the state JSON in a fenced JSON block at the end of its reply. Send a message to generate one.</div>
                 </div>
             `;
             return;
