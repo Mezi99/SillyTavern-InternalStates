@@ -504,27 +504,45 @@ import {
             return '<span class="internal-states-muted">none</span>';
         }
         if (typeof value === 'boolean' || typeof value === 'number') {
-            return String(value);
+            return '<span class="internal-states-value-num">' + String(value) + '</span>';
         }
         if (typeof value === 'string') {
-            return escapeHtml(value);
+            return '<span class="internal-states-value-str">' + escapeHtml(value) + '</span>';
         }
         if (Array.isArray(value)) {
-            if (value.length === 0) {
-                return '<span class="internal-states-muted">none</span>';
-            }
-            return '<ul>' + value.map(item => '<li>' + renderValue(item) + '</li>').join('') + '</ul>';
+            return renderArray(value);
         }
         if (isPlainObject(value)) {
-            const entries = Object.entries(value);
-            if (entries.length === 0) {
-                return '<span class="internal-states-muted">none</span>';
-            }
-            return '<div class="internal-states-object">' + entries.map(([key, val]) => {
-                return '<div class="internal-states-field"><span class="internal-states-key">' + escapeHtml(key) + '</span><span class="internal-states-field-value">' + renderValue(val) + '</span></div>';
-            }).join('') + '</div>';
+            return renderObject(value);
         }
         return escapeHtml(String(value));
+    }
+
+    function renderArray(arr) {
+        if (arr.length === 0) {
+            return '<span class="internal-states-muted">none</span>';
+        }
+        const allScalars = arr.every(item => item === null || item === undefined || typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean');
+        if (allScalars) {
+            return '<div class="internal-states-chips">' + arr.map(item =>
+                '<span class="internal-states-chip">' + escapeHtml(String(item)) + '</span>').join('') + '</div>';
+        }
+        return '<div class="internal-states-items">' + arr.map(item =>
+            '<div class="internal-states-card">' + renderValue(item) + '</div>').join('') + '</div>';
+    }
+
+    function renderObject(obj) {
+        const entries = Object.entries(obj);
+        if (entries.length === 0) {
+            return '<span class="internal-states-muted">none</span>';
+        }
+        const scalars = entries.filter(([, v]) => v === null || v === undefined || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean');
+        const groups = entries.filter(([, v]) => isPlainObject(v) || Array.isArray(v));
+        const rows = scalars.map(([k, v]) =>
+            '<div class="internal-states-field"><span class="internal-states-key">' + escapeHtml(k) + '</span><span class="internal-states-field-value">' + renderValue(v) + '</span></div>').join('');
+        const subs = groups.map(([k, v]) =>
+            '<div class="internal-states-group"><div class="internal-states-group-head">' + escapeHtml(k) + '</div>' + renderValue(v) + '</div>').join('');
+        return '<div class="internal-states-object">' + rows + subs + '</div>';
     }
 
     function getModuleSummary(state, id) {
@@ -598,7 +616,7 @@ import {
         const world = state.world || {};
         const worldHtml = Object.keys(world).length > 0
             ? `
-                <details class="internal-states-module" open>
+                <details class="internal-states-module">
                     <summary><span>🌍</span><span>World</span><span class="internal-states-summary-line">turn ${world.turn ?? '?'}</span></summary>
                     <div class="internal-states-module-body">${renderValue(world)}</div>
                 </details>
@@ -610,7 +628,7 @@ import {
             if (data === undefined) return '';
             const summary = getModuleSummary(state, stateDef.id);
             return `
-                <details class="internal-states-module" open>
+                <details class="internal-states-module">
                     <summary><span>${escapeHtml(stateDef.icon)}</span><span>${escapeHtml(stateDef.name)}</span>${summary ? `<span class="internal-states-summary-line">${escapeHtml(summary)}</span>` : ''}</summary>
                     <div class="internal-states-module-body">${renderValue(data)}</div>
                 </details>
